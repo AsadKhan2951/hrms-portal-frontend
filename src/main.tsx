@@ -39,7 +39,7 @@ queryClient.getMutationCache().subscribe(event => {
 
 const apiBaseUrl = import.meta.env.VITE_API_URL?.trim();
 const trpcApiUrl = apiBaseUrl
-  ? `${apiBaseUrl.replace(/\\/+$/, "")}/api/trpc`
+  ? `${apiBaseUrl.replace(/\/+$/, "")}/api/trpc`
   : "/api/trpc";
 
 const trpcClient = trpc.createClient({
