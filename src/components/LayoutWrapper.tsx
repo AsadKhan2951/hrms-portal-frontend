@@ -23,6 +23,8 @@ import {
   Menu,
   X,
   FolderKanban,
+  Users,
+  Shield,
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { GlobalChatWidget } from "@/components/GlobalChatWidget";
@@ -47,15 +49,18 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
   });
 
   const menuItems = [
-    { icon: Home, label: "Dashboard", path: "/dashboard" },
-    { icon: Calendar, label: "Attendance", path: "/attendance" },
+    { icon: Home, label: "Flow Central", path: "/dashboard" },
+    { icon: Clock, label: "Attendance", path: "/attendance" },
     { icon: ClipboardList, label: "Leave Management", path: "/leave" },
     { icon: FolderKanban, label: "Projects", path: "/projects" },
     { icon: FileText, label: "Forms", path: "/forms" },
     { icon: MessageSquare, label: "Chat", path: "/chat" },
+    { icon: Calendar, label: "Calendar", path: "/calendar" },
+    { icon: Users, label: "Schedule Meeting", path: "/schedule-meeting" },
     { icon: DollarSign, label: "Payslips", path: "/payslips" },
     { icon: Bell, label: "Announcements", path: "/announcements" },
-    { icon: Settings, label: "Settings", path: "/settings" },
+    { icon: Settings, label: "Account", path: "/account" },
+    ...(user?.role === "admin" ? [{ icon: Shield, label: "Admin Panel", path: "/admin" }] : []),
   ];
 
   const filteredMenuItems = menuItems.filter(item =>
