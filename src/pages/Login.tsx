@@ -79,19 +79,6 @@ export default function Login() {
             </Button>
           </form>
           
-          <div className="mt-4 pt-4 border-t">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                setEmployeeId("ADMIN001");
-                setPassword("123");
-              }}
-            >
-              Quick Login as Admin
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </div>
