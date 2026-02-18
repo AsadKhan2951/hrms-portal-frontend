@@ -77,14 +77,14 @@ export default function Account() {
   // Extended profile data
   const profileData = {
     name: user.name || "Employee",
-    email: user.email || "employee@rad.com",
-    phone: "+92 300 1234567",
-    address: "123 Main Street, Karachi, Pakistan",
-    cnic: "42101-1234567-1",
-    designation: user.position || "Software Developer",
-    department: user.department || "Engineering",
-    employeeId: user.employeeId || "EMP001",
-    joinDate: user.createdAt ? new Date(user.createdAt) : new Date(),
+    email: user.email || "-",
+    phone: "Not set",
+    address: "Not set",
+    cnic: "Not set",
+    designation: user.position || "Not set",
+    department: user.department || "Not set",
+    employeeId: user.employeeId || "-",
+    joinDate: user.createdAt ? new Date(user.createdAt) : null,
   };
 
   const personalInfo = [
@@ -99,7 +99,7 @@ export default function Account() {
     { icon: Briefcase, label: "Designation", value: profileData.designation },
     { icon: Briefcase, label: "Department", value: profileData.department },
     { icon: CreditCard, label: "Employee ID", value: profileData.employeeId },
-    { icon: Calendar, label: "Date of Joining", value: format(profileData.joinDate, "MMMM dd, yyyy") },
+    { icon: Calendar, label: "Date of Joining", value: profileData.joinDate ? format(profileData.joinDate, "MMMM dd, yyyy") : "-" },
   ];
 
   return (

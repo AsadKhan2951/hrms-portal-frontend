@@ -4,43 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, FileText, DollarSign, TrendingUp } from "lucide-react";
 import { format } from "date-fns";
-
-// Dummy payslip data
-const dummyPayslips = [
-  {
-    id: 1,
-    month: "January 2026",
-    date: new Date("2026-01-31"),
-    basicSalary: 50000,
-    allowances: 10000,
-    deductions: 5000,
-    netSalary: 55000,
-    status: "paid",
-  },
-  {
-    id: 2,
-    month: "December 2025",
-    date: new Date("2025-12-31"),
-    basicSalary: 50000,
-    allowances: 10000,
-    deductions: 5000,
-    netSalary: 55000,
-    status: "paid",
-  },
-  {
-    id: 3,
-    month: "November 2025",
-    date: new Date("2025-11-30"),
-    basicSalary: 50000,
-    allowances: 8000,
-    deductions: 4500,
-    netSalary: 53500,
-    status: "paid",
-  },
-];
+import { trpc } from "@/lib/trpc";
+import { useMemo } from "react";
 
 export default function Payslips() {
-  const latestPayslip = dummyPayslips[0];
+  const { data: payslips = [], isLoading } = trpc.dashboard.getPayslips.useQuery();
+  const latestPayslip = useMemo(() => payslips[0], [payslips]);
 
   const handleDownload = (payslipId: number) => {
     // Placeholder for download functionality
@@ -58,55 +27,61 @@ export default function Payslips() {
       </div>
 
       {/* Latest Payslip Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-500/10 rounded-lg">
-              <DollarSign className="h-5 w-5 text-blue-500" />
+      {latestPayslip ? (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-500/10 rounded-lg">
+                <DollarSign className="h-5 w-5 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Basic Salary</p>
+                <p className="text-xl font-bold">PKR {Number(latestPayslip.basicSalary || 0).toLocaleString()}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Basic Salary</p>
-              <p className="text-xl font-bold">PKR {latestPayslip.basicSalary.toLocaleString()}</p>
-            </div>
-          </div>
-        </Card>
+          </Card>
 
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-500/10 rounded-lg">
-              <TrendingUp className="h-5 w-5 text-green-500" />
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-500/10 rounded-lg">
+                <TrendingUp className="h-5 w-5 text-green-500" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Allowances</p>
+                <p className="text-xl font-bold">PKR {Number(latestPayslip.allowances || 0).toLocaleString()}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Allowances</p>
-              <p className="text-xl font-bold">PKR {latestPayslip.allowances.toLocaleString()}</p>
-            </div>
-          </div>
-        </Card>
+          </Card>
 
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-red-500/10 rounded-lg">
-              <TrendingUp className="h-5 w-5 text-red-500 rotate-180" />
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-500/10 rounded-lg">
+                <TrendingUp className="h-5 w-5 text-red-500 rotate-180" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Deductions</p>
+                <p className="text-xl font-bold">PKR {Number(latestPayslip.deductions || 0).toLocaleString()}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Deductions</p>
-              <p className="text-xl font-bold">PKR {latestPayslip.deductions.toLocaleString()}</p>
-            </div>
-          </div>
-        </Card>
+          </Card>
 
-        <Card className="p-4 bg-primary text-primary-foreground">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/10 rounded-lg">
-              <DollarSign className="h-5 w-5" />
+          <Card className="p-4 bg-primary text-primary-foreground">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/10 rounded-lg">
+                <DollarSign className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs opacity-90">Net Salary</p>
+                <p className="text-xl font-bold">PKR {Number(latestPayslip.netSalary || 0).toLocaleString()}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs opacity-90">Net Salary</p>
-              <p className="text-xl font-bold">PKR {latestPayslip.netSalary.toLocaleString()}</p>
-            </div>
-          </div>
+          </Card>
+        </div>
+      ) : (
+        <Card className="p-6 text-center text-muted-foreground">
+          {isLoading ? "Loading payslips..." : "No payslip data available yet"}
         </Card>
-      </div>
+      )}
 
       {/* Payslip History */}
       <Card>
@@ -116,65 +91,79 @@ export default function Payslips() {
 
         <div className="p-4">
           <div className="space-y-3">
-            {dummyPayslips.map((payslip) => (
-              <Card key={payslip.id} className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-muted rounded-lg">
-                      <FileText className="h-6 w-6" />
+            {isLoading ? (
+              <div className="text-center text-muted-foreground py-6">Loading payslips...</div>
+            ) : payslips.length === 0 ? (
+              <div className="text-center text-muted-foreground py-6">No payslips found</div>
+            ) : (
+              payslips.map((payslip: any) => (
+                <Card key={payslip.id} className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-muted rounded-lg">
+                        <FileText className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-lg">
+                          {payslip.month && payslip.year
+                            ? format(new Date(payslip.year, payslip.month - 1, 1), "MMMM yyyy")
+                            : "Payslip"}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          {payslip.paidAt
+                            ? `Paid on ${format(new Date(payslip.paidAt), "MMMM dd, yyyy")}`
+                            : payslip.createdAt
+                              ? `Created on ${format(new Date(payslip.createdAt), "MMMM dd, yyyy")}`
+                              : "Payment date unavailable"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-6">
+                      <div className="text-right">
+                        <p className="text-sm text-muted-foreground">Net Salary</p>
+                        <p className="text-xl font-bold">
+                          PKR {Number(payslip.netSalary || 0).toLocaleString()}
+                        </p>
+                      </div>
+
+                      <Badge variant="default" className="capitalize">
+                        {payslip.paidAt ? "paid" : "pending"}
+                      </Badge>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownload(Number(payslip.id))}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Breakdown */}
+                  <div className="mt-4 pt-4 border-t grid grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Basic Salary</p>
+                      <p className="font-semibold">PKR {Number(payslip.basicSalary || 0).toLocaleString()}</p>
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg">{payslip.month}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Paid on {format(payslip.date, "MMMM dd, yyyy")}
+                      <p className="text-sm text-muted-foreground">Allowances</p>
+                      <p className="font-semibold text-green-600">
+                        + PKR {Number(payslip.allowances || 0).toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Deductions</p>
+                      <p className="font-semibold text-red-600">
+                        - PKR {Number(payslip.deductions || 0).toLocaleString()}
                       </p>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <p className="text-sm text-muted-foreground">Net Salary</p>
-                      <p className="text-xl font-bold">
-                        PKR {payslip.netSalary.toLocaleString()}
-                      </p>
-                    </div>
-
-                    <Badge variant="default" className="capitalize">
-                      {payslip.status}
-                    </Badge>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDownload(payslip.id)}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Breakdown */}
-                <div className="mt-4 pt-4 border-t grid grid-cols-3 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Basic Salary</p>
-                    <p className="font-semibold">PKR {payslip.basicSalary.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Allowances</p>
-                    <p className="font-semibold text-green-600">
-                      + PKR {payslip.allowances.toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Deductions</p>
-                    <p className="font-semibold text-red-600">
-                      - PKR {payslip.deductions.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              ))
+            )}
           </div>
         </div>
       </Card>

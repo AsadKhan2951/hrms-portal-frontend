@@ -48,66 +48,6 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 
-// Dummy data - will be replaced with real data from tRPC
-const dummyEmployees = [
-  {
-    id: 1,
-    employeeId: "EMP001",
-    name: "Hassan",
-    email: "hassan@rad.com",
-    department: "Engineering",
-    position: "Senior Developer",
-    status: "active",
-    profileImage: null,
-    // Personal Details
-    dateOfBirth: "1990-05-15",
-    gender: "male",
-    maritalStatus: "single",
-    nationality: "UAE",
-    personalEmail: "hassan.personal@gmail.com",
-    mobilePhone: "+971501234567",
-    currentAddress: "Dubai, UAE",
-    // Employment Details
-    jobTitle: "Senior Software Developer",
-    employmentStatus: "full_time",
-    joinedDate: "2024-01-15",
-    workLocation: "Dubai Office",
-    shift: "Day Shift",
-    weeklyHours: 40,
-    // Financial
-    monthlySalary: 15000,
-    annualSalary: 180000,
-    // Leave Balance
-    leaveBalance: { vacation: 15, sick: 10, casual: 5 },
-  },
-  {
-    id: 2,
-    employeeId: "EMP002",
-    name: "Talha",
-    email: "talha@rad.com",
-    department: "Engineering",
-    position: "Software Developer",
-    status: "active",
-    profileImage: null,
-    dateOfBirth: "1992-08-20",
-    gender: "male",
-    maritalStatus: "married",
-    nationality: "Pakistan",
-    personalEmail: "talha.personal@gmail.com",
-    mobilePhone: "+971509876543",
-    currentAddress: "Abu Dhabi, UAE",
-    jobTitle: "Software Developer",
-    employmentStatus: "full_time",
-    joinedDate: "2024-02-01",
-    workLocation: "Abu Dhabi Office",
-    shift: "Day Shift",
-    weeklyHours: 40,
-    monthlySalary: 12000,
-    annualSalary: 144000,
-    leaveBalance: { vacation: 18, sick: 12, casual: 6 },
-  },
-];
-
 export default function EmployeeManagement() {
   const { user } = useAuth();
   const utils = trpc.useUtils();
@@ -946,7 +886,7 @@ export default function EmployeeManagement() {
                           <span className="text-sm text-muted-foreground">2 days ago</span>
                         </div>
                         <div className="text-sm">
-                          Changed by: <span className="font-medium">Aamir (Admin)</span>
+                          Changed by: <span className="font-medium">{user?.name || "Admin"}</span>
                         </div>
                         <div className="text-sm text-muted-foreground">
                           Monthly salary changed from AED 14,000 to AED 15,000
@@ -958,7 +898,7 @@ export default function EmployeeManagement() {
                           <span className="text-sm text-muted-foreground">1 week ago</span>
                         </div>
                         <div className="text-sm">
-                          Changed by: <span className="font-medium">Aamir (Admin)</span>
+                          Changed by: <span className="font-medium">{user?.name || "Admin"}</span>
                         </div>
                         <div className="text-sm text-muted-foreground">
                           Transferred from Marketing to Engineering

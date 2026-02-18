@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import LayoutWrapper from "@/components/LayoutWrapper";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,106 +16,81 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-
-// Dummy notifications for display
-const dummyNotifications = [
-  {
-    id: 1,
-    type: "project_assigned",
-    title: "New Project Assigned",
-    message: "You have been assigned to the 'Website Redesign' project by Team Lead",
-    priority: "high",
-    isRead: false,
-    relatedId: 1,
-    relatedType: "project",
-    createdAt: new Date("2026-02-13T10:30:00"),
-  },
-  {
-    id: 2,
-    type: "hours_shortfall",
-    title: "Daily Hours Shortfall",
-    message: "You worked 5.5 hours today. Target is 8 hours (minimum 6.5 hours). You are 1 hour short of minimum requirement.",
-    priority: "high",
-    isRead: false,
-    relatedId: null,
-    relatedType: null,
-    createdAt: new Date("2026-02-12T18:30:00"),
-  },
-  {
-    id: 3,
-    type: "attendance_issue",
-    title: "Late Arrival Detected",
-    message: "You clocked in at 9:45 AM today. Standard time is 9:00 AM. Please ensure punctuality.",
-    priority: "medium",
-    isRead: false,
-    relatedId: null,
-    relatedType: null,
-    createdAt: new Date("2026-02-13T09:45:00"),
-  },
-  {
-    id: 4,
-    type: "hours_shortfall",
-    title: "Weekly Hours Alert",
-    message: "Your average working hours this week is 6.2 hours/day. Target is 8 hours. Consider increasing your daily hours to meet targets.",
-    priority: "medium",
-    isRead: true,
-    relatedId: null,
-    relatedType: null,
-    createdAt: new Date("2026-02-10T17:00:00"),
-  },
-  {
-    id: 5,
-    type: "announcement",
-    title: "New Company Announcement",
-    message: "Updated Leave Policy has been posted. Please review the changes.",
-    priority: "low",
-    isRead: true,
-    relatedId: 2,
-    relatedType: "announcement",
-    createdAt: new Date("2026-02-10T14:00:00"),
-  },
-  {
-    id: 6,
-    type: "hours_shortfall",
-    title: "Monthly Hours Summary",
-    message: "Your average working hours this month is 7.1 hours/day. You are 0.9 hours below the 8-hour target. Total shortfall: 18 hours this month.",
-    priority: "high",
-    isRead: true,
-    relatedId: null,
-    relatedType: null,
-    createdAt: new Date("2026-02-08T09:00:00"),
-  },
-];
+import { trpc } from "@/lib/trpc";
 
 type FilterType = "all" | "unread" | "project_assigned" | "attendance_issue" | "hours_shortfall";
 
 export default function Notifications() {
   const [filter, setFilter] = useState<FilterType>("all");
-  const [notifications, setNotifications] = useState(dummyNotifications);
-
-  const filteredNotifications = notifications.filter((notification) => {
-    if (filter === "all") return true;
-    if (filter === "unread") return !notification.isRead;
-    return notification.type === filter;
+  const utils = trpc.useUtils();
+  const { data, isLoading } = trpc.notifications.getAll.useQuery();
+  const markAsReadMutation = trpc.notifications.markAsRead.useMutation({
+    onSuccess: async () => {
+      await utils.notifications.getAll.invalidate();
+      await utils.notifications.getUnreadCount.invalidate();
+    },
   });
+  const markAllAsReadMutation = trpc.notifications.markAllAsRead.useMutation({
+    onSuccess: async () => {
+      await utils.notifications.getAll.invalidate();
+      await utils.notifications.getUnreadCount.invalidate();
+    },
+  });
+  const deleteMutation = trpc.notifications.delete.useMutation({
+    onSuccess: async () => {
+      await utils.notifications.getAll.invalidate();
+      await utils.notifications.getUnreadCount.invalidate();
+    },
+  });
+
+  const [notifications, setNotifications] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (data) {
+      setNotifications(data);
+    }
+  }, [data]);
+
+  const filteredNotifications = useMemo(() => {
+    return notifications.filter((notification) => {
+      if (filter === "all") return true;
+      if (filter === "unread") return !notification.isRead;
+      return notification.type === filter;
+    });
+  }, [notifications, filter]);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
-  const markAsRead = (id: number) => {
-    setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, isRead: true } : n)
+  const markAsRead = (id: string) => {
+    setNotifications(prev =>
+      prev.map(n => String(n.id) === id ? { ...n, isRead: true } : n)
     );
-    toast.success("Notification marked as read");
+    markAsReadMutation.mutate(
+      { notificationId: id },
+      {
+        onSuccess: () => toast.success("Notification marked as read"),
+        onError: () => toast.error("Failed to mark notification as read"),
+      }
+    );
   };
 
   const markAllAsRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-    toast.success("All notifications marked as read");
+    markAllAsReadMutation.mutate(undefined, {
+      onSuccess: () => toast.success("All notifications marked as read"),
+      onError: () => toast.error("Failed to mark all as read"),
+    });
   };
 
-  const deleteNotification = (id: number) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-    toast.success("Notification deleted");
+  const deleteNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => String(n.id) !== id));
+    deleteMutation.mutate(
+      { notificationId: id },
+      {
+        onSuccess: () => toast.success("Notification deleted"),
+        onError: () => toast.error("Failed to delete notification"),
+      }
+    );
   };
 
   const getNotificationIcon = (type: string) => {
@@ -231,7 +206,11 @@ export default function Notifications() {
         </div>
 
         {/* Notifications List */}
-        {filteredNotifications.length > 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center h-40">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+        ) : filteredNotifications.length > 0 ? (
           <div className="space-y-3">
             {filteredNotifications.map((notification) => (
               <Card
@@ -274,7 +253,7 @@ export default function Notifications() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => markAsRead(notification.id)}
+                            onClick={() => markAsRead(String(notification.id))}
                             className="h-7 text-xs"
                           >
                             <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -284,7 +263,7 @@ export default function Notifications() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => deleteNotification(notification.id)}
+                          onClick={() => deleteNotification(String(notification.id))}
                           className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10"
                         >
                           <Trash2 className="h-3 w-3" />

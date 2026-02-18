@@ -1,5 +1,5 @@
 import AdminLayout from "@/components/AdminLayout";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,9 +11,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { 
-  BarChart3, 
-  Download, 
+import {
+  BarChart3,
+  Download,
   Calendar,
   TrendingUp,
   TrendingDown,
@@ -21,23 +21,22 @@ import {
   Users,
   AlertTriangle,
   FileText,
-  Activity
+  Activity,
 } from "lucide-react";
 import { Redirect } from "wouter";
 import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
 
 export default function AdvancedReports() {
   const { user } = useAuth();
   const [selectedReport, setSelectedReport] = useState("attendance-summary");
   const [selectedMonth, setSelectedMonth] = useState("February 2026");
 
-  // Check if user is admin
   if (user && user.role !== "admin") {
     return <Redirect to="/dashboard" />;
   }
 
   const handleExport = (format: "pdf" | "excel") => {
-    // TODO: Implement export functionality
     toast.success(`Exporting report as ${format.toUpperCase()}...`);
   };
 
@@ -72,26 +71,83 @@ export default function AdvancedReports() {
   const months = [
     "January 2026", "February 2026", "March 2026", "April 2026",
     "May 2026", "June 2026", "July 2026", "August 2026",
-    "September 2026", "October 2026", "November 2026", "December 2026"
+    "September 2026", "October 2026", "November 2026", "December 2026",
   ];
 
-  // Dummy data for demonstration
-  const attendanceSummaryData = [
-    { employee: "Hassan", totalDays: 20, present: 18, absent: 2, leaves: 0, payableDays: 18 },
-    { employee: "Talha", totalDays: 20, present: 19, absent: 1, leaves: 0, payableDays: 19 },
-  ];
+  const { data: employeeData = [] } = trpc.employees.list.useQuery();
+  const employees = employeeData.filter((emp: any) => emp?.role === "user");
+  const { data: leaveRequests = [] } = trpc.admin.getLeaveRequests.useQuery();
+  const { data: timeEntries = [] } = trpc.admin.getTimeEntriesByRange.useQuery(() => {
+    const [monthName, yearStr] = selectedMonth.split(" ");
+    const year = Number(yearStr);
+    const monthIndex = months.findIndex(m => m.startsWith(monthName));
+    const startDate = new Date(year, monthIndex, 1);
+    const endDate = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+    return { startDate, endDate } as const;
+  });
+  const { data: employeeStatuses = [] } = trpc.admin.getEmployeeStatusSnapshot.useQuery();
 
-  const otAnalysisData = [
-    { employee: "Hassan", regularOT: 5, weekendOT: 2, holidayOT: 0, totalOT: 7 },
-    { employee: "Talha", regularOT: 3, weekendOT: 1, holidayOT: 0, totalOT: 4 },
-  ];
+  const daysInMonth = useMemo(() => {
+    const [monthName, yearStr] = selectedMonth.split(" ");
+    const year = Number(yearStr);
+    const monthIndex = months.findIndex(m => m.startsWith(monthName));
+    return new Date(year, monthIndex + 1, 0).getDate();
+  }, [selectedMonth]);
 
-  const keyMetrics = [
-    { label: "Absence Rate", value: "5.2%", trend: "down", color: "green" },
-    { label: "Tardiness Rate", value: "12.5%", trend: "up", color: "red" },
-    { label: "Overtime Percentage", value: "8.3%", trend: "down", color: "green" },
-    { label: "Capacity Utilization", value: "94.8%", trend: "up", color: "green" },
-  ];
+  const attendanceSummaryData = useMemo(() => {
+    return employees.map((emp: any) => {
+      const empEntries = timeEntries.filter((e: any) => String(e.userId) === String(emp.id) && e.status !== "active");
+      const presentDays = new Set(empEntries.map((e: any) => new Date(e.timeIn).toDateString())).size;
+      const empLeaves = leaveRequests.filter((l: any) => l.user?.id === emp.id && l.status === "approved");
+      const leaveDays = empLeaves.reduce((sum: number, l: any) => {
+        if (!l.startDate || !l.endDate) return sum;
+        const start = new Date(l.startDate);
+        const end = new Date(l.endDate);
+        return sum + (Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      }, 0);
+      const absent = Math.max(daysInMonth - presentDays - leaveDays, 0);
+      return {
+        employee: emp.name || emp.employeeId || "Employee",
+        totalDays: daysInMonth,
+        present: presentDays,
+        absent,
+        leaves: leaveDays,
+        payableDays: presentDays + leaveDays,
+      };
+    });
+  }, [employees, timeEntries, leaveRequests, daysInMonth]);
+
+  const otAnalysisData = useMemo(() => {
+    return employees.map((emp: any) => {
+      const empEntries = timeEntries.filter((e: any) => String(e.userId) === String(emp.id) && e.status !== "active");
+      const overtime = empEntries.reduce((sum: number, e: any) => {
+        const hours = e.totalHours
+          ? Number(e.totalHours)
+          : e.timeOut
+            ? (new Date(e.timeOut).getTime() - new Date(e.timeIn).getTime()) / (1000 * 60 * 60)
+            : 0;
+        return sum + Math.max(0, hours - 8);
+      }, 0);
+      return {
+        employee: emp.name || emp.employeeId || "Employee",
+        regularOT: Number(overtime.toFixed(1)),
+        weekendOT: 0,
+        holidayOT: 0,
+        totalOT: Number(overtime.toFixed(1)),
+      };
+    });
+  }, [employees, timeEntries]);
+
+  const keyMetrics = useMemo(() => {
+    const totalEmployees = employees.length || 1;
+    const onLeave = employeeStatuses.filter((e: any) => e.status === "on_leave").length;
+    return [
+      { label: "Absence Rate", value: `${((onLeave / totalEmployees) * 100).toFixed(1)}%`, trend: "down", color: "green" },
+      { label: "Tardiness Rate", value: "0%", trend: "up", color: "red" },
+      { label: "Overtime Percentage", value: "0%", trend: "down", color: "green" },
+      { label: "Capacity Utilization", value: `${((employeeStatuses.filter((e: any) => e.status === "timed_in" || e.status === "on_break").length / totalEmployees) * 100).toFixed(0)}%`, trend: "up", color: "green" },
+    ];
+  }, [employees, employeeStatuses]);
 
   const renderReportContent = () => {
     switch (selectedReport) {
@@ -189,7 +245,9 @@ export default function AdvancedReports() {
                     <Users className="h-6 w-6 text-green-500" />
                   </div>
                 </div>
-                <h3 className="text-2xl font-bold mb-1">2</h3>
+                <h3 className="text-2xl font-bold mb-1">
+                  {employeeStatuses.filter((e: any) => e.status === "timed_in" || e.status === "on_break").length}
+                </h3>
                 <p className="text-sm text-muted-foreground">Currently Working</p>
               </Card>
 
@@ -199,7 +257,9 @@ export default function AdvancedReports() {
                     <Users className="h-6 w-6 text-red-500" />
                   </div>
                 </div>
-                <h3 className="text-2xl font-bold mb-1">0</h3>
+                <h3 className="text-2xl font-bold mb-1">
+                  {employeeStatuses.filter((e: any) => e.status === "on_leave").length}
+                </h3>
                 <p className="text-sm text-muted-foreground">Absent Today</p>
               </Card>
 
@@ -209,7 +269,9 @@ export default function AdvancedReports() {
                     <Clock className="h-6 w-6 text-blue-500" />
                   </div>
                 </div>
-                <h3 className="text-2xl font-bold mb-1">0</h3>
+                <h3 className="text-2xl font-bold mb-1">
+                  {employeeStatuses.filter((e: any) => e.status === "on_break").length}
+                </h3>
                 <p className="text-sm text-muted-foreground">On Break</p>
               </Card>
             </div>
@@ -217,14 +279,14 @@ export default function AdvancedReports() {
             <Card className="p-6">
               <h3 className="font-semibold mb-4">Live Status</h3>
               <div className="space-y-3">
-                {attendanceSummaryData.map((emp, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                {employeeStatuses.map((emp: any) => (
+                  <div key={emp.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                     <div className="flex items-center gap-3">
-                      <div className="h-3 w-3 bg-green-500 rounded-full"></div>
-                      <span className="font-medium">{emp.employee}</span>
+                      <div className={`h-3 w-3 ${emp.status === "timed_in" ? "bg-green-500" : emp.status === "on_break" ? "bg-blue-500" : "bg-gray-500"} rounded-full`}></div>
+                      <span className="font-medium">{emp.name}</span>
                     </div>
                     <Badge variant="outline" className="bg-green-500/10 text-green-600">
-                      Working
+                      {emp.status === "timed_in" ? "Working" : emp.status === "on_break" ? "On Break" : emp.status === "on_leave" ? "On Leave" : "Offline"}
                     </Badge>
                   </div>
                 ))}
@@ -249,9 +311,8 @@ export default function AdvancedReports() {
   return (
     <AdminLayout title="Advanced Reports">
       <div className="space-y-6">
-      {/* Export Buttons */}
-      <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => handleExport("excel")}>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => handleExport("excel")}>\
             <Download className="h-4 w-4 mr-2" />
             Export Excel
           </Button>
@@ -259,90 +320,85 @@ export default function AdvancedReports() {
             <Download className="h-4 w-4 mr-2" />
             Export PDF
           </Button>
-      </div>
-
-      {/* Filters */}
-      <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Report Type</label>
-            <Select value={selectedReport} onValueChange={setSelectedReport}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {reportCategories.map((category) => (
-                  <div key={category.title}>
-                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                      {category.title}
-                    </div>
-                    {category.reports.map((report) => (
-                      <SelectItem key={report.id} value={report.id}>
-                        {report.name}
-                      </SelectItem>
-                    ))}
-                  </div>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Month</label>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {months.map((month) => (
-                  <SelectItem key={month} value={month}>
-                    {month}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </Card>
-
-      {/* Report Content */}
-      <Card className="p-6">
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-1">
-            {reportCategories
-              .flatMap(c => c.reports)
-              .find(r => r.id === selectedReport)?.name}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Report for {selectedMonth}
-          </p>
         </div>
 
-        {renderReportContent()}
-      </Card>
-
-      {/* Report Categories Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {reportCategories.map((category, idx) => (
-          <Card key={idx} className="p-6">
-            <h3 className="font-semibold mb-4">{category.title}</h3>
+        <Card className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              {category.reports.map((report) => (
-                <Button
-                  key={report.id}
-                  variant={selectedReport === report.id ? "default" : "ghost"}
-                  className="w-full justify-start text-sm h-auto py-2"
-                  onClick={() => setSelectedReport(report.id)}
-                >
-                  <report.icon className="h-4 w-4 mr-2 shrink-0" />
-                  <span className="text-left line-clamp-2">{report.name}</span>
-                </Button>
-              ))}
+              <label className="text-sm font-medium">Report Type</label>
+              <Select value={selectedReport} onValueChange={setSelectedReport}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {reportCategories.map((category) => (
+                    <div key={category.title}>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                        {category.title}
+                      </div>
+                      {category.reports.map((report) => (
+                        <SelectItem key={report.id} value={report.id}>
+                          {report.name}
+                        </SelectItem>
+                      ))}
+                    </div>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </Card>
-        ))}
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Month</label>
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {months.map((month) => (
+                    <SelectItem key={month} value={month}>
+                      {month}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold mb-1">
+              {reportCategories
+                .flatMap((c) => c.reports)
+                .find((r) => r.id === selectedReport)?.name}
+            </h2>
+            <p className="text-sm text-muted-foreground">Report for {selectedMonth}</p>
+          </div>
+
+          {renderReportContent()}
+        </Card>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {reportCategories.map((category, idx) => (
+            <Card key={idx} className="p-6">
+              <h3 className="font-semibold mb-4">{category.title}</h3>
+              <div className="space-y-2">
+                {category.reports.map((report) => (
+                  <Button
+                    key={report.id}
+                    variant={selectedReport === report.id ? "default" : "ghost"}
+                    className="w-full justify-start text-sm h-auto py-2"
+                    onClick={() => setSelectedReport(report.id)}
+                  >
+                    <report.icon className="h-4 w-4 mr-2 shrink-0" />
+                    <span className="text-left line-clamp-2">{report.name}</span>
+                  </Button>
+                ))}
+              </div>
+            </Card>
+          ))}
+        </div>
       </div>
-    </div>
     </AdminLayout>
   );
 }

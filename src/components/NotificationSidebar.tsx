@@ -22,58 +22,13 @@ interface NotificationSidebarProps {
   onClose: () => void;
 }
 
-// Dummy notifications - will be replaced with real data from tRPC
-const dummyNotifications = [
-  {
-    id: 1,
-    type: "project_assigned",
-    title: "New Project Assigned",
-    message: "You have been assigned to the 'Website Redesign' project",
-    priority: "high",
-    isRead: false,
-    createdAt: new Date("2026-02-13T10:30:00"),
-  },
-  {
-    id: 2,
-    type: "hours_shortfall",
-    title: "Daily Hours Shortfall",
-    message: "You worked 5.5 hours today. Target is 8 hours.",
-    priority: "high",
-    isRead: false,
-    createdAt: new Date("2026-02-12T18:30:00"),
-  },
-  {
-    id: 3,
-    type: "attendance_issue",
-    title: "Late Arrival Detected",
-    message: "You clocked in at 9:45 AM today.",
-    priority: "medium",
-    isRead: false,
-    createdAt: new Date("2026-02-13T09:45:00"),
-  },
-  {
-    id: 4,
-    type: "announcement",
-    title: "New Company Announcement",
-    message: "Updated Leave Policy has been posted.",
-    priority: "low",
-    isRead: true,
-    createdAt: new Date("2026-02-10T14:00:00"),
-  },
-  {
-    id: 5,
-    type: "hours_shortfall",
-    title: "Weekly Hours Alert",
-    message: "Your average working hours this week is 6.2 hours/day.",
-    priority: "medium",
-    isRead: true,
-    createdAt: new Date("2026-02-10T17:00:00"),
-  },
-];
-
 export function NotificationSidebar({ isOpen, onClose }: NotificationSidebarProps) {
   const { user } = useAuth();
   const currentUserId = user?.id ? String(user.id) : null;
+  const { data: notifications = [] } = trpc.notifications.getAll.useQuery(undefined, {
+    refetchInterval: isOpen ? 10000 : false,
+    enabled: isOpen,
+  });
   const { data: chatMessages } = trpc.chat.getMessages.useQuery(
     { limit: 50 },
     { refetchInterval: 10000, enabled: isOpen }
@@ -131,13 +86,21 @@ export function NotificationSidebar({ isOpen, onClose }: NotificationSidebarProp
       }
     : null;
 
-  const mergedNotifications = [
-    ...(chatNotification ? [chatNotification] : []),
-    ...dummyNotifications,
-  ];
+  const mergedNotifications = useMemo(() => {
+    const combined = [
+      ...(chatNotification ? [chatNotification] : []),
+      ...notifications,
+    ];
+    return combined.sort((a: any, b: any) => {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [chatNotification, notifications]);
+
   const recentNotifications = mergedNotifications.slice(0, 5);
   const unreadCount =
-    dummyNotifications.filter(n => !n.isRead).length + unreadChatCount;
+    notifications.filter(n => !n.isRead).length + unreadChatCount;
 
   const getNotificationIcon = (type: string) => {
     switch (type) {

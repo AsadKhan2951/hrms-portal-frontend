@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import LayoutWrapper from "@/components/LayoutWrapper";
 import { Card } from "@/components/ui/card";
@@ -8,85 +8,65 @@ import { Megaphone, Calendar, Loader2, List, Grid3x3, Check } from "lucide-react
 import { format, isToday, isThisWeek, isBefore, startOfWeek } from "date-fns";
 import { toast } from "sonner";
 
-// Dummy announcements for display
-const dummyAnnouncements = [
-  {
-    id: "1" as any,
-    title: "Welcome to Rad.flow HRMS",
-    content: "We're excited to introduce our new HR management system. This platform will help streamline your daily tasks, from time tracking to leave management.",
-    priority: "high",
-    createdAt: new Date("2026-02-13"),
-  },
-  {
-    id: "2" as any,
-    title: "Updated Leave Policy",
-    content: "Please note that our leave policy has been updated. All employees are now entitled to 20 annual leave days per year.",
-    priority: "medium",
-    createdAt: new Date("2026-02-10"),
-  },
-  {
-    id: "3" as any,
-    title: "Monthly Team Meeting",
-    content: "Our monthly all-hands meeting is scheduled for Friday, February 21st at 3:00 PM. Attendance is mandatory for all team members.",
-    priority: "medium",
-    createdAt: new Date("2026-02-08"),
-  },
-  {
-    id: "4" as any,
-    title: "Office Timings Reminder",
-    content: "Reminder: Standard office hours are 9:00 AM to 6:00 PM, Monday through Friday. Minimum working hours per day is 6.5 hours.",
-    priority: "low",
-    createdAt: new Date("2026-02-05"),
-  },
-  {
-    id: "5" as any,
-    title: "System Maintenance Notice",
-    content: "The HRMS system will undergo scheduled maintenance on Saturday from 2:00 AM to 4:00 AM. Services may be temporarily unavailable.",
-    priority: "high",
-    createdAt: new Date("2026-01-28"),
-  },
-];
-
 type ViewMode = "list" | "grid";
 type FilterMode = "today" | "week" | "previous";
 
 export default function Announcements() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [filterMode, setFilterMode] = useState<FilterMode>("today");
-  const [readAnnouncements, setReadAnnouncements] = useState<(string | number)[]>([]);
+  const [readAnnouncements, setReadAnnouncements] = useState<string[]>([]);
 
-  const { data: announcements, isLoading } = trpc.dashboard.getAnnouncements.useQuery();
-
-  // Use dummy data if no announcements from backend
-  const allAnnouncements = announcements && announcements.length > 0 
-    ? announcements 
-    : dummyAnnouncements;
-
-  // Filter announcements based on selected filter
-  const filteredAnnouncements = allAnnouncements.filter((announcement) => {
-    const announcementDate = new Date(announcement.createdAt);
-    
-    switch (filterMode) {
-      case "today":
-        return isToday(announcementDate);
-      case "week":
-        return isThisWeek(announcementDate, { weekStartsOn: 1 });
-      case "previous":
-        return isBefore(announcementDate, startOfWeek(new Date(), { weekStartsOn: 1 }));
-      default:
-        return true;
-    }
+  const utils = trpc.useUtils();
+  const { data: announcements = [], isLoading } = trpc.dashboard.getAnnouncements.useQuery();
+  const { data: readIds = [] } = trpc.dashboard.getAnnouncementReadIds.useQuery();
+  const markReadMutation = trpc.dashboard.markAnnouncementRead.useMutation({
+    onSuccess: async () => {
+      await utils.dashboard.getAnnouncementReadIds.invalidate();
+    },
   });
 
+  // Filter announcements based on selected filter
+  const filteredAnnouncements = useMemo(() => {
+    return announcements.filter((announcement) => {
+      const announcementDate = new Date(announcement.createdAt);
+
+      switch (filterMode) {
+        case "today":
+          return isToday(announcementDate);
+        case "week":
+          return isThisWeek(announcementDate, { weekStartsOn: 1 });
+        case "previous":
+          return isBefore(announcementDate, startOfWeek(new Date(), { weekStartsOn: 1 }));
+        default:
+          return true;
+      }
+    });
+  }, [announcements, filterMode]);
+
   // Show most recent announcement by default if today filter has no results
-  const displayAnnouncements = filterMode === "today" && filteredAnnouncements.length === 0
-    ? [allAnnouncements[0]].filter(Boolean)
-    : filteredAnnouncements;
+  const displayAnnouncements = useMemo(() => {
+    if (filterMode === "today" && filteredAnnouncements.length === 0) {
+      return announcements.length ? [announcements[0]] : [];
+    }
+    return filteredAnnouncements;
+  }, [announcements, filteredAnnouncements, filterMode]);
+
+  useEffect(() => {
+    setReadAnnouncements(readIds.filter(Boolean).map((id) => String(id)));
+  }, [readIds]);
 
   const markAsRead = (id: string | number) => {
-    if (!readAnnouncements.includes(id)) {
-      setReadAnnouncements([...readAnnouncements, id]);
-      toast.success("Announcement marked as read");
+    const idValue = String(id);
+    if (!readAnnouncements.includes(idValue)) {
+      setReadAnnouncements([...readAnnouncements, idValue]);
+      markReadMutation.mutate({ announcementId: String(id) }, {
+        onSuccess: () => {
+          toast.success("Announcement marked as read");
+        },
+        onError: () => {
+          toast.error("Failed to mark announcement as read");
+        },
+      });
     }
   };
 
@@ -187,7 +167,7 @@ export default function Announcements() {
         {displayAnnouncements && displayAnnouncements.length > 0 ? (
           <div className={viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-3"}>
             {displayAnnouncements.map((announcement) => {
-              const isRead = readAnnouncements.includes(announcement.id);
+              const isRead = readAnnouncements.includes(String(announcement.id));
               
               return viewMode === "list" ? (
                 // List View

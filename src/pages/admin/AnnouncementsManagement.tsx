@@ -10,65 +10,59 @@ import {
   Megaphone,
   Calendar,
   Users,
-  Edit,
   Trash2
 } from "lucide-react";
 import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
+import { format } from "date-fns";
 
 export default function AnnouncementsManagement() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [priority, setPriority] = useState<"normal" | "important" | "urgent">("normal");
+  const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
 
-  // Dummy data
-  const announcements = [
-    {
-      id: 1,
-      title: "Office Closure - Public Holiday",
-      content: "The office will be closed on February 14th for the national holiday.",
-      priority: "important",
-      createdAt: "2026-02-10",
-      author: "Aamir",
-      readCount: 12
+  const utils = trpc.useUtils();
+  const { data: announcements = [], isLoading } = trpc.admin.getAnnouncements.useQuery();
+  const createAnnouncement = trpc.admin.createAnnouncement.useMutation({
+    onSuccess: async () => {
+      await utils.admin.getAnnouncements.invalidate();
+      toast.success("Announcement published successfully!");
+      setTitle("");
+      setContent("");
+      setPriority("medium");
+      setShowCreateDialog(false);
     },
-    {
-      id: 2,
-      title: "New Project Kickoff",
-      content: "We're starting a new mobile app project. All developers please attend the kickoff meeting on Monday.",
-      priority: "normal",
-      createdAt: "2026-02-08",
-      author: "Aamir",
-      readCount: 8
+    onError: (error) => {
+      toast.error(error.message || "Failed to publish announcement");
     },
-    {
-      id: 3,
-      title: "Urgent: System Maintenance",
-      content: "The HRMS system will undergo maintenance tonight from 10 PM to 2 AM. Please clock out before 10 PM.",
-      priority: "urgent",
-      createdAt: "2026-02-13",
-      author: "Aamir",
-      readCount: 15
+  });
+  const deleteAnnouncement = trpc.admin.deleteAnnouncement.useMutation({
+    onSuccess: async () => {
+      await utils.admin.getAnnouncements.invalidate();
+      toast.success("Announcement deleted");
     },
-  ];
+    onError: (error) => {
+      toast.error(error.message || "Failed to delete announcement");
+    },
+  });
 
   const handleCreateAnnouncement = () => {
     if (!title || !content) {
       toast.error("Please fill in all fields");
       return;
     }
-
-    toast.success("Announcement published successfully!");
-    setTitle("");
-    setContent("");
-    setPriority("normal");
-    setShowCreateDialog(false);
+    createAnnouncement.mutate({
+      title,
+      content,
+      priority,
+    });
   };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case "urgent": return "destructive";
-      case "important": return "default";
+      case "high": return "destructive";
+      case "medium": return "default";
       default: return "secondary";
     }
   };
@@ -121,23 +115,23 @@ export default function AnnouncementsManagement() {
                 <label className="text-sm font-medium mb-2 block">Priority</label>
                 <div className="flex gap-2">
                   <Button
-                    variant={priority === "normal" ? "default" : "outline"}
+                    variant={priority === "low" ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setPriority("normal")}
+                    onClick={() => setPriority("low")}
                   >
                     Normal
                   </Button>
                   <Button
-                    variant={priority === "important" ? "default" : "outline"}
+                    variant={priority === "medium" ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setPriority("important")}
+                    onClick={() => setPriority("medium")}
                   >
                     Important
                   </Button>
                   <Button
-                    variant={priority === "urgent" ? "default" : "outline"}
+                    variant={priority === "high" ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setPriority("urgent")}
+                    onClick={() => setPriority("high")}
                   >
                     Urgent
                   </Button>
@@ -158,41 +152,49 @@ export default function AnnouncementsManagement() {
 
         {/* Announcements List */}
         <div className="space-y-3">
-          {announcements.map((announcement) => (
-            <Card key={announcement.id} className="p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="font-semibold">{announcement.title}</h3>
-                    <Badge variant={getPriorityColor(announcement.priority)}>
-                      {announcement.priority}
-                    </Badge>
+          {isLoading ? (
+            <Card className="p-6 text-center text-muted-foreground">Loading announcements...</Card>
+          ) : announcements.length === 0 ? (
+            <Card className="p-6 text-center text-muted-foreground">No announcements found</Card>
+          ) : (
+            announcements.map((announcement: any) => (
+              <Card key={announcement.id} className="p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-semibold">{announcement.title}</h3>
+                      <Badge variant={getPriorityColor(announcement.priority)}>
+                        {announcement.priority}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      {announcement.content}
+                    </p>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {announcement.createdAt ? format(new Date(announcement.createdAt), "MMM dd, yyyy") : "--"}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        {announcement.readCount ?? 0} employees read
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    {announcement.content}
-                  </p>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {announcement.createdAt}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Users className="h-3 w-3" />
-                      {announcement.readCount} employees read
-                    </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => deleteAnnouncement.mutate({ id: String(announcement.id) })}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            ))
+          )}
         </div>
       </div>
     </AdminLayout>

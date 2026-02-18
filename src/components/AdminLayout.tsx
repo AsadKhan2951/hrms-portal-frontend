@@ -50,6 +50,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
     { limit: 100 },
     { refetchInterval: 10000 }
   );
+  const { data: notifications = [] } = trpc.notifications.getAll.useQuery();
 
   const unreadChatCount = useMemo(() => {
     if (!currentUserId || !chatMessages) return 0;
@@ -99,9 +100,12 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
           },
         ]
       : []),
-    { id: 1, type: "time_in", message: "Hassan Ali clocked in at 08:45 AM", time: "5m ago" },
-    { id: 2, type: "task_complete", message: "Talha Khan completed 'Setup database'", time: "15m ago" },
-    { id: 3, type: "project_update", message: "HRMS Portal progress updated to 75%", time: "1h ago" },
+    ...notifications.slice(0, 5).map((n: any) => ({
+      id: n.id,
+      type: n.type,
+      message: n.title ? `${n.title} — ${n.message}` : n.message,
+      time: n.createdAt ? new Date(n.createdAt).toLocaleString() : "",
+    })),
   ];
 
   return (
