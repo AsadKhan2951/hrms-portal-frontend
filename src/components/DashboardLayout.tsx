@@ -185,7 +185,7 @@ function DashboardLayoutContent({
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
                   <img
-                    src="/LogoRadFlow.png"
+                    src="/radflow-logo.png"
                     alt="Rad.flow"
                     className="h-8 w-auto object-contain"
                   />

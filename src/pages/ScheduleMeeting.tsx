@@ -1,5 +1,5 @@
 import { useState } from "react";
-import DashboardLayout from "../components/DashboardLayout";
+import LayoutWrapper from "@/components/LayoutWrapper";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -71,8 +71,8 @@ export default function ScheduleMeeting() {
   }) || [];
 
   return (
-    <DashboardLayout>
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
+    <LayoutWrapper>
+      <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold">Schedule Meeting</h1>
           <p className="text-muted-foreground">Create and manage your meetings</p>
@@ -229,6 +229,6 @@ export default function ScheduleMeeting() {
           </Card>
         </div>
       </div>
-    </DashboardLayout>
+    </LayoutWrapper>
   );
 }
