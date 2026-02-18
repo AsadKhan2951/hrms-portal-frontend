@@ -140,7 +140,8 @@ export default function EmployeeManagement() {
     department: "",
     position: "",
   });
-  const [cnicFile, setCnicFile] = useState<File | null>(null);
+  const [cnicFrontFile, setCnicFrontFile] = useState<File | null>(null);
+  const [cnicBackFile, setCnicBackFile] = useState<File | null>(null);
   const [offerLetterFile, setOfferLetterFile] = useState<File | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -196,7 +197,7 @@ export default function EmployeeManagement() {
     ? `${apiBaseUrl.replace(/\/+$/, "")}/api/upload-employee-document`
     : "/api/upload-employee-document";
 
-  const uploadDocument = async (file: File, docType: "cnic" | "offer_letter") => {
+  const uploadDocument = async (file: File, docType: "cnic_front" | "cnic_back" | "offer_letter") => {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("docType", docType);
@@ -218,22 +219,34 @@ export default function EmployeeManagement() {
       toast.error("Please fill all required fields");
       return;
     }
-    if (!cnicFile || !offerLetterFile) {
-      toast.error("Please upload CNIC and Job Offer Letter");
-      return;
-    }
 
     setIsCreating(true);
     try {
-      const [cnicUrl, offerUrl] = await Promise.all([
-        uploadDocument(cnicFile, "cnic"),
-        uploadDocument(offerLetterFile, "offer_letter"),
-      ]);
+      const uploads: Array<Promise<string>> = [];
+      const uploadMap: Array<"cnic_front" | "cnic_back" | "offer_letter"> = [];
+      if (cnicFrontFile) {
+        uploads.push(uploadDocument(cnicFrontFile, "cnic_front"));
+        uploadMap.push("cnic_front");
+      }
+      if (cnicBackFile) {
+        uploads.push(uploadDocument(cnicBackFile, "cnic_back"));
+        uploadMap.push("cnic_back");
+      }
+      if (offerLetterFile) {
+        uploads.push(uploadDocument(offerLetterFile, "offer_letter"));
+        uploadMap.push("offer_letter");
+      }
+      const uploadResults = uploads.length ? await Promise.all(uploads) : [];
+      const uploadUrls: Record<string, string> = {};
+      uploadResults.forEach((url, idx) => {
+        uploadUrls[uploadMap[idx]] = url;
+      });
 
       await createEmployeeMutation.mutateAsync({
         ...newEmployee,
-        cnicDocumentUrl: cnicUrl,
-        offerLetterUrl: offerUrl,
+        cnicFrontUrl: uploadUrls.cnic_front,
+        cnicBackUrl: uploadUrls.cnic_back,
+        offerLetterUrl: uploadUrls.offer_letter,
       });
 
       toast.success("Employee added successfully");
@@ -246,7 +259,8 @@ export default function EmployeeManagement() {
         department: "",
         position: "",
       });
-      setCnicFile(null);
+      setCnicFrontFile(null);
+      setCnicBackFile(null);
       setOfferLetterFile(null);
     } catch (error: any) {
       toast.error(error?.message || "Failed to create employee");
@@ -1035,11 +1049,15 @@ export default function EmployeeManagement() {
               <h4 className="font-semibold mb-3">Required Documents</h4>
               <div className="space-y-3">
                 <div>
-                  <Label>CNIC Document *</Label>
-                  <Input type="file" onChange={(e) => setCnicFile(e.target.files?.[0] || null)} />
+                  <Label>CNIC Front</Label>
+                  <Input type="file" onChange={(e) => setCnicFrontFile(e.target.files?.[0] || null)} />
                 </div>
                 <div>
-                  <Label>Job Offer Letter *</Label>
+                  <Label>CNIC Back</Label>
+                  <Input type="file" onChange={(e) => setCnicBackFile(e.target.files?.[0] || null)} />
+                </div>
+                <div>
+                  <Label>Job Offer Letter</Label>
                   <Input type="file" onChange={(e) => setOfferLetterFile(e.target.files?.[0] || null)} />
                 </div>
               </div>
