@@ -488,14 +488,14 @@ export default function EmployeeManagement() {
 
             {(editableEmployee || selectedEmployee) && (
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-7">
-                  <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="employment">Employment</TabsTrigger>
-                  <TabsTrigger value="financial">Financial</TabsTrigger>
-                  <TabsTrigger value="performance">Performance</TabsTrigger>
-                  <TabsTrigger value="documents">Documents</TabsTrigger>
-                  <TabsTrigger value="compliance">Compliance</TabsTrigger>
-                  <TabsTrigger value="audit">Audit Log</TabsTrigger>
+                <TabsList className="w-full flex flex-wrap gap-2 bg-muted/40 p-1 rounded-lg">
+                  <TabsTrigger value="overview" className="whitespace-nowrap px-3">Overview</TabsTrigger>
+                  <TabsTrigger value="employment" className="whitespace-nowrap px-3">Employment</TabsTrigger>
+                  <TabsTrigger value="financial" className="whitespace-nowrap px-3">Financial</TabsTrigger>
+                  <TabsTrigger value="performance" className="whitespace-nowrap px-3">Performance</TabsTrigger>
+                  <TabsTrigger value="documents" className="whitespace-nowrap px-3">Documents</TabsTrigger>
+                  <TabsTrigger value="compliance" className="whitespace-nowrap px-3">Compliance</TabsTrigger>
+                  <TabsTrigger value="audit" className="whitespace-nowrap px-3">Audit Log</TabsTrigger>
                 </TabsList>
 
                 {/* 1. Overview Tab - Core Employee Information */}
