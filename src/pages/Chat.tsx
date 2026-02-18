@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import LayoutWrapper from "@/components/LayoutWrapper";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,17 +12,20 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 
 export default function Chat() {
+  const { user } = useAuth();
   const [message, setMessage] = useState("");
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const utils = trpc.useUtils();
+  const currentUserId = user?.id ? String(user.id) : null;
 
   const { data: users, isLoading: usersLoading } = trpc.dashboard.getUsers.useQuery();
   const { data: messages, isLoading: messagesLoading } = trpc.chat.getMessages.useQuery(
     { limit: 100 },
     { refetchInterval: 3000 } // Poll every 3 seconds for new messages
   );
+  const markReadMutation = trpc.chat.markRead.useMutation();
 
   const sendMutation = trpc.chat.send.useMutation({
     onSuccess: () => {
@@ -77,11 +81,54 @@ export default function Chat() {
     }
   };
 
+  const allMessages = messages ?? [];
   const filteredMessages = selectedUser
-    ? messages?.filter(
-        (msg) => String(msg.senderId) === String(selectedUser) || String(msg.recipientId) === String(selectedUser)
+    ? allMessages.filter(
+        (msg) =>
+          String(msg.senderId) === String(selectedUser) ||
+          String(msg.recipientId) === String(selectedUser)
       )
-    : messages;
+    : allMessages;
+
+  const orderedMessages = useMemo(() => {
+    return [...filteredMessages].sort((a, b) => {
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+  }, [filteredMessages]);
+
+  const unreadMessages = useMemo(() => {
+    if (!currentUserId) return [];
+    return allMessages.filter((msg) => {
+      if (msg.isRead) return false;
+      if (String(msg.senderId) === currentUserId) return false;
+      const recipientId = msg.recipientId ? String(msg.recipientId) : null;
+      return !recipientId || recipientId === currentUserId;
+    });
+  }, [allMessages, currentUserId]);
+
+  const unreadTotal = unreadMessages.length;
+
+  const unreadBySender = useMemo(() => {
+    const map = new Map<string, number>();
+    unreadMessages.forEach((msg) => {
+      const senderId = String(msg.senderId);
+      map.set(senderId, (map.get(senderId) ?? 0) + 1);
+    });
+    return map;
+  }, [unreadMessages]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    if (unreadMessages.length === 0) return;
+
+    const relevantUnread = selectedUser
+      ? unreadMessages.filter((msg) => String(msg.senderId) === String(selectedUser))
+      : unreadMessages;
+
+    relevantUnread.forEach((msg) => {
+      markReadMutation.mutate({ messageId: msg.id });
+    });
+  }, [currentUserId, unreadMessages, selectedUser, markReadMutation]);
 
   const getInitials = (name: string) => {
     return name
@@ -118,12 +165,22 @@ export default function Chat() {
               <Avatar>
                 <AvatarFallback>ALL</AvatarFallback>
               </Avatar>
-              <div className="text-left">
-                <div className="font-medium">All Messages</div>
+              <div className="text-left flex-1">
+                <div className="font-medium flex items-center gap-2">
+                  All Messages
+                  {unreadTotal > 0 && (
+                    <span className="h-2 w-2 rounded-full bg-red-500" />
+                  )}
+                </div>
                 <div className="text-sm text-muted-foreground">
                   {messages?.length || 0} messages
                 </div>
               </div>
+              {unreadTotal > 0 && (
+                <span className="min-w-[20px] px-2 py-0.5 text-xs rounded-full bg-red-500 text-white text-center">
+                  {unreadTotal}
+                </span>
+              )}
             </button>
 
             {users?.map((user) => (
@@ -139,12 +196,17 @@ export default function Chat() {
                 <Avatar>
                   <AvatarFallback>{getInitials(user.name || "U")}</AvatarFallback>
                 </Avatar>
-                <div className="text-left flex-1">
+                <div className="text-left flex-1 min-w-0">
                   <div className="font-medium">{user.name}</div>
                   <div className="text-sm text-muted-foreground truncate">
                     {user.email}
                   </div>
                 </div>
+                {unreadBySender.get(String(user.id)) ? (
+                  <span className="min-w-[20px] px-2 py-0.5 text-xs rounded-full bg-red-500 text-white text-center">
+                    {unreadBySender.get(String(user.id))}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>
@@ -167,10 +229,12 @@ export default function Chat() {
         {/* Messages */}
         <ScrollArea className="flex-1 p-4" ref={scrollRef}>
           <div className="space-y-4">
-            {filteredMessages && filteredMessages.length > 0 ? (
-              filteredMessages.map((msg) => {
+            {orderedMessages.length > 0 ? (
+              orderedMessages.map((msg) => {
                 const sender = users?.find((u) => String(u.id) === String(msg.senderId));
-                const isCurrentUser = String(msg.senderId) === String(users?.[0]?.id); // Simplified check
+                const isCurrentUser = currentUserId
+                  ? String(msg.senderId) === currentUserId
+                  : false;
 
                 return (
                   <div

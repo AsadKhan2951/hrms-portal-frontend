@@ -27,6 +27,9 @@ export default function Account() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   
   const updateAvatarMutation = trpc.auth.updateAvatar.useMutation({
     onSuccess: () => {
@@ -35,6 +38,18 @@ export default function Account() {
     },
     onError: () => {
       toast.error("Failed to update avatar");
+    },
+  });
+
+  const changePasswordMutation = trpc.auth.changePassword.useMutation({
+    onSuccess: () => {
+      toast.success("Password updated successfully!");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update password");
     },
   });
 
@@ -289,6 +304,64 @@ export default function Account() {
                   </div>
                 );
               })}
+            </div>
+          </Card>
+
+          {/* Change Password */}
+          <Card className="p-6">
+            <h2 className="text-lg font-semibold mb-4">Change Password</h2>
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Current Password</label>
+                <Input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">New Password</label>
+                <Input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Confirm New Password</label>
+                <Input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter new password"
+                />
+              </div>
+              <Button
+                className="w-full"
+                disabled={changePasswordMutation.isPending}
+                onClick={() => {
+                  if (!currentPassword || !newPassword || !confirmPassword) {
+                    toast.error("Please fill all password fields");
+                    return;
+                  }
+                  if (newPassword.length < 6) {
+                    toast.error("New password must be at least 6 characters");
+                    return;
+                  }
+                  if (newPassword !== confirmPassword) {
+                    toast.error("New password and confirmation do not match");
+                    return;
+                  }
+                  changePasswordMutation.mutate({
+                    currentPassword,
+                    newPassword,
+                  });
+                }}
+              >
+                {changePasswordMutation.isPending ? "Updating..." : "Update Password"}
+              </Button>
             </div>
           </Card>
 

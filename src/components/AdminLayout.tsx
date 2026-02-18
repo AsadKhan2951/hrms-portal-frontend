@@ -1,4 +1,4 @@
-import { useState, ReactNode } from "react";
+import { useMemo, useState, ReactNode } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { Link, useLocation, Redirect } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { useRealtime } from "@/_core/hooks/useRealtime";
 import { toast } from "sonner";
 import { GlobalChatWidget } from "./GlobalChatWidget";
 
@@ -42,6 +43,23 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showNotifications, setShowNotifications] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const currentUserId = user?.id ? String(user.id) : null;
+  useRealtime();
+
+  const { data: chatMessages } = trpc.chat.getMessages.useQuery(
+    { limit: 100 },
+    { refetchInterval: 10000 }
+  );
+
+  const unreadChatCount = useMemo(() => {
+    if (!currentUserId || !chatMessages) return 0;
+    return chatMessages.filter((msg: any) => {
+      if (msg.isRead) return false;
+      if (String(msg.senderId) === currentUserId) return false;
+      const recipientId = msg.recipientId ? String(msg.recipientId) : null;
+      return !recipientId || recipientId === currentUserId;
+    }).length;
+  }, [chatMessages, currentUserId]);
 
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: () => {
@@ -71,6 +89,16 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
   const isActive = (path: string) => location === path;
 
   const recentNotifications = [
+    ...(unreadChatCount > 0
+      ? [
+          {
+            id: "chat",
+            type: "chat",
+            message: `You have ${unreadChatCount} unread chat message${unreadChatCount > 1 ? "s" : ""}.`,
+            time: "Just now",
+          },
+        ]
+      : []),
     { id: 1, type: "time_in", message: "Hassan Ali clocked in at 08:45 AM", time: "5m ago" },
     { id: 2, type: "task_complete", message: "Talha Khan completed 'Setup database'", time: "15m ago" },
     { id: 3, type: "project_update", message: "HRMS Portal progress updated to 75%", time: "1h ago" },
@@ -185,7 +213,9 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
                   onClick={() => setShowNotifications(!showNotifications)}
                 >
                   <Bell className="h-4 w-4" />
-                  <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
+                  {(unreadChatCount > 0 || recentNotifications.length > 0) && (
+                    <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
+                  )}
                 </Button>
 
                 {showNotifications && (

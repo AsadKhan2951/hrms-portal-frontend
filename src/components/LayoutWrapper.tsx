@@ -1,9 +1,10 @@
-import { useState, ReactNode } from "react";
+import { useMemo, useState, ReactNode } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
+import { useRealtime } from "@/_core/hooks/useRealtime";
 import {
   Clock,
   FileText,
@@ -40,6 +41,23 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const currentUserId = user?.id ? String(user.id) : null;
+  useRealtime();
+
+  const { data: chatMessages } = trpc.chat.getMessages.useQuery(
+    { limit: 100 },
+    { refetchInterval: 10000 }
+  );
+
+  const unreadChatCount = useMemo(() => {
+    if (!currentUserId || !chatMessages) return 0;
+    return chatMessages.filter((msg: any) => {
+      if (msg.isRead) return false;
+      if (String(msg.senderId) === currentUserId) return false;
+      const recipientId = msg.recipientId ? String(msg.recipientId) : null;
+      return !recipientId || recipientId === currentUserId;
+    }).length;
+  }, [chatMessages, currentUserId]);
 
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: () => {
@@ -126,11 +144,23 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
                 <Link key={item.path} href={item.path}>
                   <Button
                     variant={isActive ? "secondary" : "ghost"}
-                    className={`w-full ${sidebarCollapsed ? "justify-center px-0" : "justify-start"}`}
+                    className={`relative w-full ${sidebarCollapsed ? "justify-center px-0" : "justify-start"}`}
                     onClick={() => setSidebarOpen(false)}
                   >
                     <Icon className="h-5 w-5" />
-                    {!sidebarCollapsed && <span className="ml-3">{item.label}</span>}
+                    {!sidebarCollapsed && (
+                      <>
+                        <span className="ml-3 flex-1 text-left">{item.label}</span>
+                        {item.path === "/chat" && unreadChatCount > 0 && (
+                          <span className="min-w-[20px] px-2 py-0.5 text-xs rounded-full bg-red-500 text-white text-center">
+                            {unreadChatCount}
+                          </span>
+                        )}
+                      </>
+                    )}
+                    {sidebarCollapsed && item.path === "/chat" && unreadChatCount > 0 && (
+                      <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />
+                    )}
                   </Button>
                 </Link>
               );
