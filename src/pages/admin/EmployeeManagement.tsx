@@ -46,6 +46,7 @@ import { Redirect } from "wouter";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { trpc } from "@/lib/trpc";
 
 // Dummy data - will be replaced with real data from tRPC
 const dummyEmployees = [
@@ -109,21 +110,60 @@ const dummyEmployees = [
 
 export default function EmployeeManagement() {
   const { user } = useAuth();
+  const utils = trpc.useUtils();
+  const { data: employeeData = [], isLoading: employeesLoading } = trpc.employees.list.useQuery();
+  const createEmployeeMutation = trpc.employees.create.useMutation({
+    onSuccess: () => {
+      utils.employees.list.invalidate();
+    },
+  });
+  const updateEmployeeMutation = trpc.employees.update.useMutation({
+    onSuccess: () => {
+      utils.employees.list.invalidate();
+    },
+  });
+
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive" | "past">("all");
   const [filterDepartment, setFilterDepartment] = useState<string>("all");
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
+  const [editableEmployee, setEditableEmployee] = useState<any>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+  const [newEmployee, setNewEmployee] = useState({
+    name: "",
+    email: "",
+    employeeId: "",
+    password: "",
+    department: "",
+    position: "",
+  });
+  const [cnicFile, setCnicFile] = useState<File | null>(null);
+  const [offerLetterFile, setOfferLetterFile] = useState<File | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Redirect if not admin
   if (user?.role !== "admin") {
     return <Redirect to="/" />;
   }
 
-  const filteredEmployees = dummyEmployees.filter((emp) => {
+  const employees = employeeData
+    .filter((emp: any) => emp?.role !== "admin")
+    .map((emp: any) => ({
+      ...emp,
+      name: emp?.name || "Unknown",
+      email: emp?.email || "",
+      employeeId: emp?.employeeId || "",
+      status: emp?.status || "active",
+      department: emp?.department || "General",
+      position: emp?.position || "Employee",
+      leaveBalance: emp?.leaveBalance || { vacation: 0, sick: 0, casual: 0 },
+    }));
+
+  const filteredEmployees = employees.filter((emp: any) => {
     const matchesSearch =
       emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       emp.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -143,11 +183,97 @@ export default function EmployeeManagement() {
 
   const handleViewDetails = (employee: any) => {
     setSelectedEmployee(employee);
+    setEditableEmployee({ ...employee });
     setDetailsDialogOpen(true);
   };
 
   const handleBulkAction = (action: string) => {
     toast.success(`Bulk ${action} action initiated`);
+  };
+
+  const apiBaseUrl = import.meta.env.VITE_API_URL?.trim();
+  const uploadEndpoint = apiBaseUrl
+    ? `${apiBaseUrl.replace(/\/+$/, "")}/api/upload-employee-document`
+    : "/api/upload-employee-document";
+
+  const uploadDocument = async (file: File, docType: "cnic" | "offer_letter") => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("docType", docType);
+    const response = await fetch(uploadEndpoint, {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.error || "Failed to upload document");
+    }
+    const payload = await response.json();
+    return payload.url as string;
+  };
+
+  const handleCreateEmployee = async () => {
+    if (!newEmployee.name || !newEmployee.email || !newEmployee.employeeId || !newEmployee.password || !newEmployee.department || !newEmployee.position) {
+      toast.error("Please fill all required fields");
+      return;
+    }
+    if (!cnicFile || !offerLetterFile) {
+      toast.error("Please upload CNIC and Job Offer Letter");
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const [cnicUrl, offerUrl] = await Promise.all([
+        uploadDocument(cnicFile, "cnic"),
+        uploadDocument(offerLetterFile, "offer_letter"),
+      ]);
+
+      await createEmployeeMutation.mutateAsync({
+        ...newEmployee,
+        cnicDocumentUrl: cnicUrl,
+        offerLetterUrl: offerUrl,
+      });
+
+      toast.success("Employee added successfully");
+      setAddDialogOpen(false);
+      setNewEmployee({
+        name: "",
+        email: "",
+        employeeId: "",
+        password: "",
+        department: "",
+        position: "",
+      });
+      setCnicFile(null);
+      setOfferLetterFile(null);
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to create employee");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleSaveChanges = async () => {
+    if (!editableEmployee?.id) return;
+    setIsUpdating(true);
+    try {
+      await updateEmployeeMutation.mutateAsync({
+        id: editableEmployee.id,
+        name: editableEmployee.name,
+        email: editableEmployee.email,
+        employeeId: editableEmployee.employeeId,
+        department: editableEmployee.department,
+        position: editableEmployee.position,
+      });
+      toast.success("Employee updated successfully");
+      setDetailsDialogOpen(false);
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to update employee");
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   return (
@@ -239,7 +365,7 @@ export default function EmployeeManagement() {
             </div>
 
             <div className="text-sm text-muted-foreground">
-              {filteredEmployees.length} employee{filteredEmployees.length !== 1 ? "s" : ""} found
+              {employeesLoading ? "Loading..." : `${filteredEmployees.length} employee${filteredEmployees.length !== 1 ? "s" : ""} found`}
             </div>
           </div>
         </Card>
@@ -360,7 +486,7 @@ export default function EmployeeManagement() {
               </DialogDescription>
             </DialogHeader>
 
-            {selectedEmployee && (
+            {(editableEmployee || selectedEmployee) && (
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-7">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -379,19 +505,29 @@ export default function EmployeeManagement() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label>Employee ID</Label>
-                        <Input defaultValue={selectedEmployee.employeeId} disabled />
+                        <Input
+                          value={editableEmployee?.employeeId || ""}
+                          onChange={(e) =>
+                            setEditableEmployee((prev: any) => ({ ...prev, employeeId: e.target.value }))
+                          }
+                        />
                       </div>
                       <div>
                         <Label>Full Name</Label>
-                        <Input defaultValue={selectedEmployee.name} onChange={() => {}} />
+                        <Input
+                          value={editableEmployee?.name || ""}
+                          onChange={(e) =>
+                            setEditableEmployee((prev: any) => ({ ...prev, name: e.target.value }))
+                          }
+                        />
                       </div>
                       <div>
                         <Label>Date of Birth</Label>
-                        <Input type="date" defaultValue={selectedEmployee.dateOfBirth} onChange={() => {}} />
+                        <Input type="date" defaultValue={selectedEmployee?.dateOfBirth} onChange={() => {}} />
                       </div>
                       <div>
                         <Label>Gender</Label>
-                        <Select value={selectedEmployee.gender}>
+                        <Select value={selectedEmployee?.gender}>
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
@@ -404,7 +540,7 @@ export default function EmployeeManagement() {
                       </div>
                       <div>
                         <Label>Marital Status</Label>
-                        <Select value={selectedEmployee.maritalStatus}>
+                        <Select value={selectedEmployee?.maritalStatus}>
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
@@ -418,7 +554,7 @@ export default function EmployeeManagement() {
                       </div>
                       <div>
                         <Label>Nationality</Label>
-                        <Input defaultValue={selectedEmployee.nationality} onChange={() => {}} />
+                        <Input defaultValue={selectedEmployee?.nationality} onChange={() => {}} />
                       </div>
                     </div>
                   </Card>
@@ -428,19 +564,24 @@ export default function EmployeeManagement() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label>Work Email</Label>
-                        <Input defaultValue={selectedEmployee.email} onChange={() => {}} />
+                        <Input
+                          value={editableEmployee?.email || ""}
+                          onChange={(e) =>
+                            setEditableEmployee((prev: any) => ({ ...prev, email: e.target.value }))
+                          }
+                        />
                       </div>
                       <div>
                         <Label>Personal Email</Label>
-                        <Input defaultValue={selectedEmployee.personalEmail} onChange={() => {}} />
+                        <Input defaultValue={selectedEmployee?.personalEmail} onChange={() => {}} />
                       </div>
                       <div>
                         <Label>Mobile Phone</Label>
-                        <Input defaultValue={selectedEmployee.mobilePhone} onChange={() => {}} />
+                        <Input defaultValue={selectedEmployee?.mobilePhone} onChange={() => {}} />
                       </div>
                       <div>
                         <Label>Current Address</Label>
-                        <Textarea defaultValue={selectedEmployee.currentAddress} rows={2} onChange={() => {}} />
+                        <Textarea defaultValue={selectedEmployee?.currentAddress} rows={2} onChange={() => {}} />
                       </div>
                     </div>
                   </Card>
@@ -471,11 +612,21 @@ export default function EmployeeManagement() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label>Job Title</Label>
-                        <Input defaultValue={selectedEmployee.jobTitle} onChange={() => {}} />
+                        <Input
+                          value={editableEmployee?.position || ""}
+                          onChange={(e) =>
+                            setEditableEmployee((prev: any) => ({ ...prev, position: e.target.value }))
+                          }
+                        />
                       </div>
                       <div>
                         <Label>Department</Label>
-                        <Select value={selectedEmployee.department}>
+                        <Select
+                          value={editableEmployee?.department || ""}
+                          onValueChange={(value) =>
+                            setEditableEmployee((prev: any) => ({ ...prev, department: value }))
+                          }
+                        >
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
@@ -488,7 +639,7 @@ export default function EmployeeManagement() {
                       </div>
                       <div>
                         <Label>Employment Status</Label>
-                        <Select value={selectedEmployee.employmentStatus}>
+                        <Select value={selectedEmployee?.employmentStatus}>
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
@@ -502,15 +653,15 @@ export default function EmployeeManagement() {
                       </div>
                       <div>
                         <Label>Work Location</Label>
-                        <Input defaultValue={selectedEmployee.workLocation} onChange={() => {}} />
+                        <Input defaultValue={selectedEmployee?.workLocation} onChange={() => {}} />
                       </div>
                       <div>
                         <Label>Shift</Label>
-                        <Input defaultValue={selectedEmployee.shift} onChange={() => {}} />
+                        <Input defaultValue={selectedEmployee?.shift} onChange={() => {}} />
                       </div>
                       <div>
                         <Label>Weekly Hours</Label>
-                        <Input type="number" defaultValue={selectedEmployee.weeklyHours} onChange={() => {}} />
+                        <Input type="number" defaultValue={selectedEmployee?.weeklyHours} onChange={() => {}} />
                       </div>
                     </div>
                   </Card>
@@ -520,7 +671,7 @@ export default function EmployeeManagement() {
                     <div className="grid grid-cols-3 gap-4">
                       <div>
                         <Label>Joined Date</Label>
-                        <Input type="date" defaultValue={selectedEmployee.joinedDate} onChange={() => {}} />
+                        <Input type="date" defaultValue={selectedEmployee?.joinedDate} onChange={() => {}} />
                       </div>
                       <div>
                         <Label>Probation End Date</Label>
@@ -655,15 +806,15 @@ export default function EmployeeManagement() {
                     <div className="grid grid-cols-3 gap-4">
                       <div className="p-3 border rounded">
                         <div className="text-sm text-muted-foreground">Vacation Leave</div>
-                        <div className="text-2xl font-bold">{selectedEmployee.leaveBalance.vacation} days</div>
+                        <div className="text-2xl font-bold">{selectedEmployee?.leaveBalance?.vacation ?? 0} days</div>
                       </div>
                       <div className="p-3 border rounded">
                         <div className="text-sm text-muted-foreground">Sick Leave</div>
-                        <div className="text-2xl font-bold">{selectedEmployee.leaveBalance.sick} days</div>
+                        <div className="text-2xl font-bold">{selectedEmployee?.leaveBalance?.sick ?? 0} days</div>
                       </div>
                       <div className="p-3 border rounded">
                         <div className="text-sm text-muted-foreground">Casual Leave</div>
-                        <div className="text-2xl font-bold">{selectedEmployee.leaveBalance.casual} days</div>
+                        <div className="text-2xl font-bold">{selectedEmployee?.leaveBalance?.casual ?? 0} days</div>
                       </div>
                     </div>
                   </Card>
@@ -809,7 +960,8 @@ export default function EmployeeManagement() {
               <Button variant="outline" onClick={() => setDetailsDialogOpen(false)}>
                 Close
               </Button>
-              <Button>
+              <Button onClick={handleSaveChanges} disabled={isUpdating}>
+                {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Save Changes
               </Button>
             </DialogFooter>
@@ -822,54 +974,74 @@ export default function EmployeeManagement() {
             <DialogHeader>
               <DialogTitle>Add New Employee</DialogTitle>
               <DialogDescription>
-                Create a new employee profile with basic information
+                Fill in the employee details and upload required documents
               </DialogDescription>
             </DialogHeader>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Full Name *</Label>
-                <Input placeholder="John Doe" />
+                <Input
+                  placeholder="John Doe"
+                  value={newEmployee.name}
+                  onChange={(e) => setNewEmployee((prev) => ({ ...prev, name: e.target.value }))}
+                />
               </div>
               <div>
                 <Label>Email *</Label>
-                <Input type="email" placeholder="john@rad.com" />
+                <Input
+                  type="email"
+                  placeholder="john@rad.com"
+                  value={newEmployee.email}
+                  onChange={(e) => setNewEmployee((prev) => ({ ...prev, email: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Employee ID *</Label>
+                <Input
+                  placeholder="EMP001"
+                  value={newEmployee.employeeId}
+                  onChange={(e) => setNewEmployee((prev) => ({ ...prev, employeeId: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Password *</Label>
+                <Input
+                  type="password"
+                  placeholder="••••••••"
+                  value={newEmployee.password}
+                  onChange={(e) => setNewEmployee((prev) => ({ ...prev, password: e.target.value }))}
+                />
               </div>
               <div>
                 <Label>Department *</Label>
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Engineering">Engineering</SelectItem>
-                    <SelectItem value="HR">HR</SelectItem>
-                    <SelectItem value="Finance">Finance</SelectItem>
-                    <SelectItem value="Marketing">Marketing</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Input
+                  placeholder="Engineering"
+                  value={newEmployee.department}
+                  onChange={(e) => setNewEmployee((prev) => ({ ...prev, department: e.target.value }))}
+                />
               </div>
               <div>
-                <Label>Position *</Label>
-                <Input placeholder="Software Developer" />
+                <Label>Designation *</Label>
+                <Input
+                  placeholder="Software Developer"
+                  value={newEmployee.position}
+                  onChange={(e) => setNewEmployee((prev) => ({ ...prev, position: e.target.value }))}
+                />
               </div>
-              <div>
-                <Label>Joined Date *</Label>
-                <Input type="date" />
-              </div>
-              <div>
-                <Label>Employment Status *</Label>
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="full_time">Full Time</SelectItem>
-                    <SelectItem value="part_time">Part Time</SelectItem>
-                    <SelectItem value="contract">Contract</SelectItem>
-                    <SelectItem value="intern">Intern</SelectItem>
-                  </SelectContent>
-                </Select>
+            </div>
+
+            <div className="border-t pt-4">
+              <h4 className="font-semibold mb-3">Required Documents</h4>
+              <div className="space-y-3">
+                <div>
+                  <Label>CNIC Document *</Label>
+                  <Input type="file" onChange={(e) => setCnicFile(e.target.files?.[0] || null)} />
+                </div>
+                <div>
+                  <Label>Job Offer Letter *</Label>
+                  <Input type="file" onChange={(e) => setOfferLetterFile(e.target.files?.[0] || null)} />
+                </div>
               </div>
             </div>
 
@@ -877,10 +1049,8 @@ export default function EmployeeManagement() {
               <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={() => {
-                toast.success("Employee added successfully");
-                setAddDialogOpen(false);
-              }}>
+              <Button onClick={handleCreateEmployee} disabled={isCreating || createEmployeeMutation.isPending}>
+                {(isCreating || createEmployeeMutation.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Create Employee
               </Button>
             </DialogFooter>
