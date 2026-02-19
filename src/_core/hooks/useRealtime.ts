@@ -17,12 +17,20 @@ export function useRealtime() {
       utils.notifications.getUnreadCount.invalidate();
     };
 
+    const handleAnnouncements = () => {
+      utils.dashboard.getAnnouncements.invalidate();
+      utils.dashboard.getAnnouncementReadIds.invalidate();
+      utils.admin.getAnnouncements.invalidate();
+    };
+
     socket.on("chat:new", handleChat);
     socket.on("notifications:new", handleNotifications);
+    socket.on("announcements:new", handleAnnouncements);
 
     return () => {
       socket.off("chat:new", handleChat);
       socket.off("notifications:new", handleNotifications);
+      socket.off("announcements:new", handleAnnouncements);
     };
   }, [utils]);
 }

@@ -422,6 +422,7 @@ function MeetingForm({ onSubmit, onCancel }: { onSubmit: (data: any) => void; on
 
 // Event Form Component
 function EventForm({ onSubmit, onCancel }: { onSubmit: (data: any) => void; onCancel: () => void }) {
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -429,7 +430,12 @@ function EventForm({ onSubmit, onCancel }: { onSubmit: (data: any) => void; onCa
     endTime: "",
     eventType: "personal" as "reminder" | "personal" | "deadline" | "holiday",
     isAllDay: false,
+    participantIds: [] as string[],
   });
+  const { data: users = [] } = trpc.dashboard.getUsers.useQuery();
+  const availableUsers = users.filter(
+    (emp: any) => String(emp.id) !== String(user?.id ?? "")
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -472,6 +478,55 @@ function EventForm({ onSubmit, onCancel }: { onSubmit: (data: any) => void; onCa
             <SelectItem value="holiday">Holiday</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+      <div>
+        <Label>Participants</Label>
+        <Select
+          onValueChange={(value) => {
+            if (!formData.participantIds.includes(value)) {
+              setFormData({ ...formData, participantIds: [...formData.participantIds, value] });
+            }
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select participants" />
+          </SelectTrigger>
+          <SelectContent>
+            {availableUsers.length === 0 ? (
+              <SelectItem value="none" disabled>
+                No employees found
+              </SelectItem>
+            ) : (
+              availableUsers.map((user: any) => (
+                <SelectItem key={user.id} value={user.id.toString()}>
+                  {user.name} ({user.email})
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {formData.participantIds.map((id) => {
+            const user = availableUsers.find((u: any) => String(u.id) === String(id));
+            return (
+              <div key={id} className="bg-secondary px-2 py-1 rounded text-sm flex items-center gap-1">
+                {user?.name}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFormData({
+                      ...formData,
+                      participantIds: formData.participantIds.filter((pid) => pid !== id),
+                    })
+                  }
+                  className="text-destructive hover:text-destructive/80"
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
