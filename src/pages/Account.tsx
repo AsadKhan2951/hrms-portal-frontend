@@ -102,24 +102,27 @@ export default function Account() {
     { icon: Calendar, label: "Date of Joining", value: profileData.joinDate ? format(profileData.joinDate, "MMMM dd, yyyy") : "-" },
   ];
 
+  const displayAvatar = selectedAvatar || user.avatar || "ironman";
+  const isCustomAvatar = displayAvatar.startsWith("http") || displayAvatar.startsWith("data:");
+
   return (
     <LayoutWrapper>
       <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8">
         <div className="w-full max-w-3xl space-y-6">
           {/* Header */}
-          <div className="text-center space-y-3">
-            {user.avatar && user.avatar.startsWith("http") ? (
+          <div className="text-center space-y-3 pt-2">
+            {isCustomAvatar ? (
               <img
-                src={user.avatar}
+                src={displayAvatar}
                 alt="Avatar"
-                className="h-20 w-20 mx-auto rounded-full object-cover ring-2 ring-border"
+                className="h-24 w-24 mx-auto rounded-full object-cover ring-2 ring-border shadow-sm"
               />
             ) : (
-              <div 
-                className="h-20 w-20 mx-auto rounded-full flex items-center justify-center text-4xl"
-                style={{ backgroundColor: getAvatarById(user.avatar).color + "20" }}
+              <div
+                className="h-24 w-24 mx-auto rounded-full flex items-center justify-center text-5xl shadow-sm"
+                style={{ backgroundColor: getAvatarById(displayAvatar).color + "20" }}
               >
-                {getAvatarById(user.avatar).emoji}
+                {getAvatarById(displayAvatar).emoji}
               </div>
             )}
             <div>
@@ -140,12 +143,12 @@ export default function Account() {
             
             {/* Horizontal Scrollable Carousel */}
             <div className="relative mb-6">
-              <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent hover:scrollbar-thumb-primary/40">
+              <div className="flex gap-3 overflow-x-auto overflow-y-hidden pb-2 [-ms-overflow-style:'none'] [scrollbar-width:'none'] [&::-webkit-scrollbar]:hidden">
                 {SUPERHERO_AVATARS.map((avatar) => (
                   <button
                     key={avatar.id}
                     onClick={() => setSelectedAvatar(avatar.id)}
-                    className={`relative flex-shrink-0 w-20 h-20 rounded-full flex items-center justify-center text-3xl transition-all hover:scale-110 ${
+                    className={`relative flex-shrink-0 w-16 h-16 rounded-full flex items-center justify-center text-2xl transition-all hover:scale-110 ${
                       selectedAvatar === avatar.id
                         ? "ring-4 ring-primary shadow-xl scale-110"
                         : "ring-2 ring-border hover:ring-primary/50"
