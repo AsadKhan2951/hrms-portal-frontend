@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +27,13 @@ import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface TimeInOutDialogProps {
   open: boolean;
@@ -37,8 +44,19 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
   const [notes, setNotes] = useState("");
   const [currentTime, setCurrentTime] = useState(new Date());
   const [elapsedTime, setElapsedTime] = useState("");
-  const [tasks, setTasks] = useState<string[]>([]);
-  const [currentTask, setCurrentTask] = useState("");
+  const [addedTasks, setAddedTasks] = useState<Array<{
+    id?: string;
+    projectId: string;
+    projectName?: string;
+    title: string;
+    description?: string;
+    status: "todo" | "in_progress" | "completed" | "blocked";
+    source: "manual";
+  }>>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskStatus, setTaskStatus] = useState<"todo" | "in_progress" | "completed" | "blocked">("completed");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [showTaskAlert, setShowTaskAlert] = useState(false);
   const [, setLocation] = useLocation();
@@ -50,6 +68,45 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
 
   const { data: breakLogs } = trpc.timeTracking.getBreakLogs.useQuery(undefined, {
     enabled: !!activeEntry,
+  });
+
+  const { data: projects = [] } = trpc.projects.getMyProjects.useQuery();
+  const { data: completedTasksToday = [] } = trpc.timeTracking.getCompletedTasksForToday.useQuery(undefined, {
+    enabled: !!activeEntry,
+  });
+
+  useEffect(() => {
+    if (!selectedProjectId && projects.length > 0) {
+      setSelectedProjectId(String(projects[0].id));
+    }
+  }, [projects, selectedProjectId]);
+
+  const createTaskMutation = trpc.projects.createTask.useMutation({
+    onSuccess: async (data) => {
+      if (data?.task?.id) {
+        const project = projects.find((p: any) => String(p.id) === String(selectedProjectId));
+        setAddedTasks((prev) => [
+          ...prev,
+          {
+            id: String(data.task.id),
+            projectId: selectedProjectId,
+            projectName: project?.name,
+            title: taskTitle.trim(),
+            description: taskDescription.trim() || undefined,
+            status: taskStatus,
+            source: "manual",
+          },
+        ]);
+      }
+      utils.timeTracking.getCompletedTasksForToday.invalidate();
+      setTaskTitle("");
+      setTaskDescription("");
+      setTaskStatus("completed");
+      toast.success("Task added successfully");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to add task");
+    },
   });
 
   const clockInMutation = trpc.timeTracking.clockIn.useMutation({
@@ -70,7 +127,7 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
       utils.timeTracking.getAttendance.invalidate();
       onOpenChange(false);
       setNotes("");
-      setTasks([]);
+      setAddedTasks([]);
       setAttachments([]);
     },
     onError: (error) => {
@@ -105,20 +162,41 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
   };
 
   const handleClockOut = () => {
-    // Check if tasks have been added
-    if (tasks.length === 0) {
+    const totalCompleted = allTasks.filter((task) => task.status === "completed").length;
+    if (totalCompleted === 0) {
       setShowTaskAlert(true);
       return;
     }
 
-    const workLog = tasks.join("\n");
-    clockOutMutation.mutate({ notes: workLog || undefined });
+    const workLog = allTasks
+      .filter((task) => task.status === "completed")
+      .map((task) => {
+        const projectLabel = task.projectName || "Project";
+        const description = task.description ? ` - ${task.description}` : "";
+        return `[${projectLabel}] ${task.title}${description} (${task.status})`;
+      })
+      .join("\n");
+    const combinedNotes = notes?.trim()
+      ? `${workLog}${workLog ? "\n\n" : ""}Notes: ${notes.trim()}`
+      : workLog || undefined;
+
+    clockOutMutation.mutate({ notes: combinedNotes || undefined });
   };
 
   const handleForceClockOut = () => {
     setShowTaskAlert(false);
-    const workLog = tasks.length > 0 ? tasks.join("\n") : undefined;
-    clockOutMutation.mutate({ notes: workLog });
+    const workLog = allTasks
+      .filter((task) => task.status === "completed")
+      .map((task) => {
+        const projectLabel = task.projectName || "Project";
+        const description = task.description ? ` - ${task.description}` : "";
+        return `[${projectLabel}] ${task.title}${description} (${task.status})`;
+      })
+      .join("\n");
+    const combinedNotes = notes?.trim()
+      ? `${workLog}${workLog ? "\n\n" : ""}Notes: ${notes.trim()}`
+      : workLog || undefined;
+    clockOutMutation.mutate({ notes: combinedNotes });
   };
 
   const handleGoToProjects = () => {
@@ -128,14 +206,26 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
   };
 
   const addTask = () => {
-    if (currentTask.trim()) {
-      setTasks([...tasks, currentTask.trim()]);
-      setCurrentTask("");
+    if (!selectedProjectId) {
+      toast.error("Please select a project");
+      return;
     }
+    if (!taskTitle.trim()) {
+      toast.error("Please enter a task title");
+      return;
+    }
+
+    createTaskMutation.mutate({
+      projectId: selectedProjectId,
+      title: taskTitle.trim(),
+      description: taskDescription.trim() || undefined,
+      status: taskStatus,
+      timeEntryId: activeEntry?.id,
+    });
   };
 
   const removeTask = (index: number) => {
-    setTasks(tasks.filter((_, i) => i !== index));
+    setAddedTasks(addedTasks.filter((_, i) => i !== index));
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -165,6 +255,31 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
   const netWorkHours = totalHours - (totalBreakMinutes / 60);
   const isMinimumMet = totalHours >= 6.5;
   const isTargetMet = totalHours >= 8;
+
+  const normalizedCompletedTasks = useMemo(() => {
+    return completedTasksToday.map((task: any) => ({
+      id: String(task.id),
+      projectId: String(task.project?.id || task.projectId || ""),
+      projectName: task.project?.name,
+      title: task.title,
+      description: task.description,
+      status: task.status as "todo" | "in_progress" | "completed" | "blocked",
+      source: "project" as const,
+    }));
+  }, [completedTasksToday]);
+
+  const allTasks = useMemo(() => {
+    const map = new Map<string, typeof addedTasks[number]>();
+    [...normalizedCompletedTasks, ...addedTasks].forEach((task) => {
+      const key = task.id || `${task.projectId}-${task.title}-${task.status}-${task.description ?? ""}`;
+      if (!map.has(key)) {
+        map.set(key, task);
+      }
+    });
+    return Array.from(map.values());
+  }, [normalizedCompletedTasks, addedTasks]);
+
+  const completedCount = allTasks.filter((task) => task.status === "completed").length;
 
   const getTimeColor = () => {
     if (totalHours >= 8) return "text-green-500";
@@ -289,7 +404,7 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
                   <div className="bg-green-500/10 border border-green-500/20 p-4 rounded-lg">
                     <div className="text-center">
                       <div className="text-green-500 font-semibold mb-1">
-                        ✓ Target Hours Achieved!
+                        âœ“ Target Hours Achieved!
                       </div>
                       <p className="text-sm text-muted-foreground">
                         You can clock out now
@@ -321,47 +436,133 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
                 </Card>
 
                 {/* Tasks Completed Today */}
-                <div className="space-y-3">
-                  <Label>Tasks Completed Today</Label>
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Add a task you completed today..."
-                        value={currentTask}
-                        onChange={(e) => setCurrentTask(e.target.value)}
-                        onKeyPress={(e) => e.key === "Enter" && addTask()}
-                      />
-                      <Button type="button" size="icon" onClick={addTask}>
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    
-                    {tasks.length > 0 && (
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {tasks.map((task, index) => (
-                          <div key={index} className="flex items-center gap-2 bg-muted/50 p-2 rounded text-sm">
-                            <span className="flex-1">• {task}</span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={() => removeTask(index)}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {tasks.length === 0 && (
-                      <div className="text-sm text-muted-foreground bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-lg flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                        <span>Please add at least one task before clocking out</span>
-                      </div>
-                    )}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-base">
+                      Tasks Completed Today <span className="text-muted-foreground">({completedCount} tasks)</span>
+                    </Label>
                   </div>
+
+                  {normalizedCompletedTasks.length > 0 && (
+                    <div className="bg-green-500/10 border border-green-500/20 p-3 rounded-lg text-sm">
+                      <div className="font-medium text-green-500 mb-1">
+                        {normalizedCompletedTasks.length} Task{normalizedCompletedTasks.length > 1 ? "s" : ""} Already Added Today
+                      </div>
+                      <div className="text-muted-foreground">
+                        You have already completed tasks via the Projects page. You can still add more tasks here if needed.
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>Select Project *</Label>
+                      <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select project" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {projects.length === 0 ? (
+                            <SelectItem value="none" disabled>
+                              No projects assigned
+                            </SelectItem>
+                          ) : (
+                            projects.map((project: any) => (
+                              <SelectItem key={project.id} value={String(project.id)}>
+                                {project.name}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Task Title *</Label>
+                      <Input
+                        placeholder="e.g., Implemented user authentication"
+                        value={taskTitle}
+                        onChange={(e) => setTaskTitle(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Description (Optional)</Label>
+                      <Textarea
+                        placeholder="Add details about what you accomplished..."
+                        value={taskDescription}
+                        onChange={(e) => setTaskDescription(e.target.value)}
+                        rows={3}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Status *</Label>
+                      <Select value={taskStatus} onValueChange={(value) => setTaskStatus(value as any)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="completed">Completed</SelectItem>
+                          <SelectItem value="in_progress">In Progress</SelectItem>
+                          <SelectItem value="todo">To Do</SelectItem>
+                          <SelectItem value="blocked">Blocked</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <Button
+                      type="button"
+                      onClick={addTask}
+                      disabled={createTaskMutation.isPending}
+                      className="w-full"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      {createTaskMutation.isPending ? "Adding..." : "Add Task"}
+                    </Button>
+                  </div>
+
+                  {allTasks.length > 0 && (
+                    <div className="space-y-2">
+                      {allTasks.map((task, index) => (
+                        <div key={`${task.id || index}`} className="flex items-start gap-3 bg-muted/50 p-3 rounded-lg">
+                          <div className="flex-1">
+                            <div className="text-sm font-medium">
+                              {task.projectName || "Project"} • {task.title}
+                            </div>
+                            {task.description && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {task.description}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary capitalize">
+                              {task.status.replace("_", " ")}
+                            </span>
+                            {task.source === "manual" && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => removeTask(index)}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {completedCount === 0 && (
+                    <div className="text-sm text-muted-foreground bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-lg flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                      <span>Please add at least one completed task before clocking out</span>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label htmlFor="file-upload" className="cursor-pointer">
