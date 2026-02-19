@@ -148,11 +148,11 @@ export default function Chat() {
 
   return (
     <LayoutWrapper>
-    <div className="flex gap-3">
+    <div className="flex gap-3 h-[calc(100vh-10rem)]">
       {/* Users List */}
-      <Card className="w-80 p-4">
+      <Card className="w-80 p-4 h-full flex flex-col">
         <h2 className="text-lg font-semibold mb-4">Team Members</h2>
-        <ScrollArea className="h-[calc(100%-3rem)]">
+        <ScrollArea className="flex-1 pr-2">
           <div className="space-y-2">
             <button
               onClick={() => setSelectedUser(null)}
@@ -214,7 +214,7 @@ export default function Chat() {
       </Card>
 
       {/* Chat Area */}
-      <Card className="flex-1 flex flex-col">
+      <Card className="flex-1 flex flex-col h-full">
         <div className="p-4 border-b">
           <h2 className="text-lg font-semibold">
             {selectedUser

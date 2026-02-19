@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { TimeInOutDialog } from "@/components/TimeInOutDialog";
 import { getAvatarById } from "@shared/avatars";
-import { 
+import {
   Clock, 
   Calendar, 
   TrendingUp, 
@@ -44,6 +44,9 @@ import { GlobalChatWidget } from "@/components/GlobalChatWidget";
 import { NotificationSidebar } from "@/components/NotificationSidebar";
 import { CalendarSidebar } from "@/components/CalendarSidebar";
 import { QuickMeetingSidebar } from "@/components/QuickMeetingSidebar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Today's Calendar Widget Component
 function TodayCalendarWidgetContent() {
@@ -114,18 +117,22 @@ export default function Dashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState("");
   const [breakOverlayOpen, setBreakOverlayOpen] = useState(false);
+  const [breakDialogOpen, setBreakDialogOpen] = useState(false);
+  const [breakReason, setBreakReason] = useState("");
   const [notificationSidebarOpen, setNotificationSidebarOpen] = useState(false);
   const [calendarSidebarOpen, setCalendarSidebarOpen] = useState(false);
   const [meetingSidebarOpen, setMeetingSidebarOpen] = useState(false);
   const [attendanceView, setAttendanceView] = useState<'graph' | 'list'>('graph');
   const currentUserId = user?.id ? String(user.id) : null;
 
-  const logoutMutation = trpc.auth.logout.useMutation({
-    onSuccess: () => {
-      logout();
+  const handleLogout = async () => {
+    try {
+      await logout();
       window.location.href = "/";
-    },
-  });
+    } catch (error: any) {
+      toast.error(error?.message || "Please clock out before logging out");
+    }
+  };
 
   // Auto-show time in/out dialog on component mount
   useEffect(() => {
@@ -186,6 +193,8 @@ export default function Dashboard() {
     onSuccess: () => {
       toast.success("Break started");
       setBreakOverlayOpen(true);
+      setBreakDialogOpen(false);
+      setBreakReason("");
       utils.timeTracking.getBreakLogs.invalidate();
     },
     onError: (error) => {
@@ -205,6 +214,7 @@ export default function Dashboard() {
   });
 
   const activeBreak = breakLogs?.find(log => !log.breakEnd);
+  const breakReasonOptions = ["Smoke", "Meeting", "Lunch", "Outgoing", "Sleeping"];
 
   const calculateStats = () => {
     if (!monthAttendance) return { avgHours: 0, totalDays: 0, presentDays: 0 };
@@ -362,7 +372,7 @@ export default function Dashboard() {
         <div className="p-2 border-t">
           <Button
             variant="ghost"
-            onClick={() => logoutMutation.mutate()}
+            onClick={handleLogout}
             className={`w-full ${sidebarCollapsed ? "justify-center" : "justify-start"} text-red-500 hover:text-red-600 hover:bg-red-500/10`}
           >
             <LogOut className="h-5 w-5" />
@@ -491,7 +501,7 @@ export default function Dashboard() {
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => activeBreak ? endBreakMutation.mutate() : startBreakMutation.mutate()}
+                      onClick={() => activeBreak ? endBreakMutation.mutate() : setBreakDialogOpen(true)}
                     >
                       <Coffee className="h-4 w-4 mr-2" />
                       {activeBreak ? "End Break" : "Start Break"}
@@ -738,6 +748,52 @@ export default function Dashboard() {
       {/* Time In/Out Dialog */}
       <TimeInOutDialog open={timeDialogOpen} onOpenChange={setTimeDialogOpen} />
 
+      {/* Break Reason Dialog */}
+      <Dialog open={breakDialogOpen} onOpenChange={setBreakDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select Break Reason</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Select value={breakReason} onValueChange={setBreakReason}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {breakReasonOptions.map((reason) => (
+                    <SelectItem key={reason} value={reason}>
+                      {reason}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              className="w-full"
+              onClick={() => {
+                if (!breakReason) {
+                  toast.error("Please select a break reason");
+                  return;
+                }
+                startBreakMutation.mutate({ reason: breakReason as any });
+              }}
+              disabled={startBreakMutation.isPending}
+            >
+              {startBreakMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Starting...
+                </>
+              ) : (
+                "Start Break"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Global Chat Widget */}
       <GlobalChatWidget />
 
@@ -779,6 +835,11 @@ export default function Dashboard() {
               <div className="text-sm text-muted-foreground">
                 Break started at: {format(new Date(activeBreak.breakStart), "HH:mm")}
               </div>
+              {activeBreak.reason && (
+                <div className="text-sm text-muted-foreground">
+                  Reason: {activeBreak.reason}
+                </div>
+              )}
               <div className="text-lg font-semibold">
                 Duration: {Math.floor((Date.now() - new Date(activeBreak.breakStart).getTime()) / 60000)} minutes
               </div>

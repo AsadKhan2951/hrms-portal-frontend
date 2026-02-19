@@ -30,6 +30,7 @@ import {
 import { useLocation, Link } from "wouter";
 import { GlobalChatWidget } from "@/components/GlobalChatWidget";
 import { useIsMobile } from "@/hooks/useMobile";
+import { toast } from "sonner";
 
 interface LayoutWrapperProps {
   children: ReactNode;
@@ -61,12 +62,14 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
     }).length;
   }, [chatMessages, currentUserId]);
 
-  const logoutMutation = trpc.auth.logout.useMutation({
-    onSuccess: () => {
-      logout();
+  const handleLogout = async () => {
+    try {
+      await logout();
       window.location.href = "/";
-    },
-  });
+    } catch (error: any) {
+      toast.error(error?.message || "Please clock out before logging out");
+    }
+  };
 
   const menuItems = [
     { icon: Home, label: "Flow Central", path: "/dashboard" },
@@ -193,7 +196,7 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
           
           <Button
             variant="ghost"
-            onClick={() => logoutMutation.mutate()}
+            onClick={handleLogout}
             className={`w-full ${sidebarCollapsed ? "justify-center px-0" : "justify-start"} text-red-500 hover:text-red-600 hover:bg-red-500/10`}
           >
             <LogOut className="h-5 w-5" />

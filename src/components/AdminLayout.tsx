@@ -62,12 +62,14 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
     }).length;
   }, [chatMessages, currentUserId]);
 
-  const logoutMutation = trpc.auth.logout.useMutation({
-    onSuccess: () => {
-      logout();
+  const handleLogout = async () => {
+    try {
+      await logout();
       toast.success("Logged out successfully");
-    },
-  });
+    } catch (error: any) {
+      toast.error(error?.message || "Please clock out before logging out");
+    }
+  };
 
   // Check if user is admin
   if (user && user.role !== "admin") {
@@ -166,8 +168,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => logoutMutation.mutate()}
-              disabled={logoutMutation.isPending}
+              onClick={handleLogout}
               className={`w-full justify-start ${!sidebarOpen && "justify-center px-2"}`}
             >
               <LogOut className="h-4 w-4 shrink-0" />
