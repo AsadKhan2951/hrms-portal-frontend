@@ -273,6 +273,7 @@ export default function Calendar() {
 
 // Meeting Form Component
 function MeetingForm({ onSubmit, onCancel }: { onSubmit: (data: any) => void; onCancel: () => void }) {
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -284,8 +285,10 @@ function MeetingForm({ onSubmit, onCancel }: { onSubmit: (data: any) => void; on
     participantIds: [] as string[],
   });
 
-  // TODO: Add getAllUsers endpoint or fetch from a different source
-  const users: any[] = [];
+  const { data: users = [] } = trpc.dashboard.getUsers.useQuery();
+  const availableUsers = users.filter(
+    (emp: any) => String(emp.id) !== String(user?.id ?? "")
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -375,17 +378,23 @@ function MeetingForm({ onSubmit, onCancel }: { onSubmit: (data: any) => void; on
           <SelectTrigger>
             <SelectValue placeholder="Select participants" />
           </SelectTrigger>
-          <SelectContent>
-            {users.map((user: any) => (
-              <SelectItem key={user.id} value={user.id.toString()}>
-                {user.name} ({user.email})
+      <SelectContent>
+            {availableUsers.length === 0 ? (
+              <SelectItem value="none" disabled>
+                No employees found
               </SelectItem>
-            ))}
+            ) : (
+              availableUsers.map((user: any) => (
+                <SelectItem key={user.id} value={user.id.toString()}>
+                  {user.name} ({user.email})
+                </SelectItem>
+              ))
+            )}
           </SelectContent>
         </Select>
         <div className="mt-2 flex flex-wrap gap-2">
           {formData.participantIds.map((id) => {
-            const user = users.find((u: any) => String(u.id) === String(id));
+            const user = availableUsers.find((u: any) => String(u.id) === String(id));
             return (
               <div key={id} className="bg-secondary px-2 py-1 rounded text-sm flex items-center gap-1">
                 {user?.name}

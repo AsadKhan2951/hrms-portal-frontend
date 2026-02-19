@@ -1,18 +1,27 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import LayoutWrapper from "@/components/LayoutWrapper";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Label } from "../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 import { trpc } from "../lib/trpc";
 import { toast } from "sonner";
 import { Calendar, Clock, Users, MapPin, Link as LinkIcon, Video, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
+import { useAuth } from "../_core/hooks/useAuth";
 
 export default function ScheduleMeeting() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -21,10 +30,11 @@ export default function ScheduleMeeting() {
     endTime: "",
     location: "",
     meetingLink: "",
-    participantIds: [] as number[],
+    participantIds: [] as string[],
   });
 
   const { data: upcomingMeetings, isLoading } = trpc.meetings.getMyMeetings.useQuery();
+  const { data: employees = [], isLoading: employeesLoading } = trpc.dashboard.getUsers.useQuery();
   const createMeeting = trpc.meetings.create.useMutation({
     onSuccess: () => {
       toast.success("Meeting scheduled successfully!");
@@ -63,6 +73,11 @@ export default function ScheduleMeeting() {
       participantIds: formData.participantIds,
     });
   };
+
+  const availableEmployees = useMemo(() => {
+    const currentId = user?.id ? String(user.id) : null;
+    return (employees || []).filter((emp: any) => String(emp.id) !== currentId);
+  }, [employees, user]);
 
   const futureMeetings = upcomingMeetings?.filter((meeting: any) => {
     return new Date(meeting.startTime) > new Date();
@@ -166,6 +181,68 @@ export default function ScheduleMeeting() {
                     />
                   </div>
                 </div>
+              </div>
+
+              <div>
+                <Label>Participants</Label>
+                <Select
+                  onValueChange={(value) => {
+                    if (!formData.participantIds.includes(value)) {
+                      setFormData({
+                        ...formData,
+                        participantIds: [...formData.participantIds, value],
+                      });
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select participants" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employeesLoading ? (
+                      <SelectItem value="loading" disabled>
+                        Loading employees...
+                      </SelectItem>
+                    ) : availableEmployees.length === 0 ? (
+                      <SelectItem value="none" disabled>
+                        No employees found
+                      </SelectItem>
+                    ) : (
+                      availableEmployees.map((emp: any) => (
+                        <SelectItem key={emp.id} value={String(emp.id)}>
+                          {emp.name} ({emp.employeeId || "ID"})
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+
+                {formData.participantIds.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {formData.participantIds.map((id) => {
+                      const emp = availableEmployees.find(
+                        (e: any) => String(e.id) === String(id)
+                      );
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          className="text-xs px-2 py-1 rounded-full bg-secondary hover:bg-secondary/80"
+                          onClick={() =>
+                            setFormData({
+                              ...formData,
+                              participantIds: formData.participantIds.filter(
+                                (pid) => pid !== id
+                              ),
+                            })
+                          }
+                        >
+                          {emp?.name || "Employee"} ×
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-4">

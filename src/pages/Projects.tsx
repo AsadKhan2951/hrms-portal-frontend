@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import LayoutWrapper from "@/components/LayoutWrapper";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -33,8 +33,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 export default function Projects() {
+  const { user } = useAuth();
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [showTaskDialog, setShowTaskDialog] = useState(false);
   const [showProjectDialog, setShowProjectDialog] = useState(false);
@@ -42,10 +44,12 @@ export default function Projects() {
     name: string;
     description: string;
     priority: "low" | "medium" | "high";
+    employeeIds: string[];
   }>({
     name: "",
     description: "",
     priority: "medium",
+    employeeIds: [],
   });
   const [taskData, setTaskData] = useState<{
     title: string;
@@ -58,6 +62,7 @@ export default function Projects() {
   });
 
   const { data: projects, isLoading: projectsLoading } = trpc.projects.getMyProjects.useQuery();
+  const { data: employees = [] } = trpc.dashboard.getUsers.useQuery();
   const { data: tasks, isLoading: tasksLoading } = trpc.projects.getTasks.useQuery(
     { projectId: selectedProject! },
     { enabled: !!selectedProject }
@@ -69,7 +74,7 @@ export default function Projects() {
     onSuccess: () => {
       toast.success("Project created successfully!");
       setShowProjectDialog(false);
-      setProjectData({ name: "", description: "", priority: "medium" });
+      setProjectData({ name: "", description: "", priority: "medium", employeeIds: [] });
       utils.projects.getMyProjects.invalidate();
     },
     onError: (error) => {
@@ -166,6 +171,12 @@ export default function Projects() {
     };
     return colors[status] || colors.active;
   };
+
+  const availableEmployees = useMemo(() => {
+    if (!employees) return [];
+    const currentId = user?.id ? String(user.id) : null;
+    return employees.filter((emp: any) => String(emp.id) !== currentId);
+  }, [employees, user]);
 
   return (
     <LayoutWrapper>
@@ -378,6 +389,62 @@ export default function Projects() {
                       <SelectItem value="high">High</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Assign Employees</Label>
+                  <Select
+                    onValueChange={(value) => {
+                      if (!projectData.employeeIds.includes(value)) {
+                        setProjectData({
+                          ...projectData,
+                          employeeIds: [...projectData.employeeIds, value],
+                        });
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select employees" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableEmployees.length === 0 ? (
+                        <SelectItem value="none" disabled>
+                          No employees available
+                        </SelectItem>
+                      ) : (
+                        availableEmployees.map((emp: any) => (
+                          <SelectItem key={emp.id} value={String(emp.id)}>
+                            {emp.name} ({emp.employeeId || "ID"})
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {projectData.employeeIds.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {projectData.employeeIds.map((id) => {
+                        const emp = availableEmployees.find((e: any) => String(e.id) === String(id));
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            className="text-xs px-2 py-1 rounded-full bg-secondary hover:bg-secondary/80"
+                            onClick={() =>
+                              setProjectData({
+                                ...projectData,
+                                employeeIds: projectData.employeeIds.filter((eid) => eid !== id),
+                              })
+                            }
+                          >
+                            {emp?.name || "Employee"} ×
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    You will be assigned automatically.
+                  </p>
                 </div>
               </div>
 
