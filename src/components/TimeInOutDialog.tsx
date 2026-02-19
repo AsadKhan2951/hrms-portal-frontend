@@ -449,78 +449,80 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
                         {normalizedCompletedTasks.length} Task{normalizedCompletedTasks.length > 1 ? "s" : ""} Already Added Today
                       </div>
                       <div className="text-muted-foreground">
-                        You have already completed tasks via the Projects page. You can still add more tasks here if needed.
+                        Your tasks are already recorded for today.
                       </div>
                     </div>
                   )}
 
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label>Select Project *</Label>
-                      <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select project" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {projects.length === 0 ? (
-                            <SelectItem value="none" disabled>
-                              No projects assigned
-                            </SelectItem>
-                          ) : (
-                            projects.map((project: any) => (
-                              <SelectItem key={project.id} value={String(project.id)}>
-                                {project.name}
+                  {completedCount === 0 && (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label>Select Project *</Label>
+                        <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select project" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {projects.length === 0 ? (
+                              <SelectItem value="none" disabled>
+                                No projects assigned
                               </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                            ) : (
+                              projects.map((project: any) => (
+                                <SelectItem key={project.id} value={String(project.id)}>
+                                  {project.name}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label>Task Title *</Label>
-                      <Input
-                        placeholder="e.g., Implemented user authentication"
-                        value={taskTitle}
-                        onChange={(e) => setTaskTitle(e.target.value)}
-                      />
-                    </div>
+                      <div className="space-y-2">
+                        <Label>Task Title *</Label>
+                        <Input
+                          placeholder="e.g., Implemented user authentication"
+                          value={taskTitle}
+                          onChange={(e) => setTaskTitle(e.target.value)}
+                        />
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label>Description (Optional)</Label>
-                      <Textarea
-                        placeholder="Add details about what you accomplished..."
-                        value={taskDescription}
-                        onChange={(e) => setTaskDescription(e.target.value)}
-                        rows={3}
-                      />
-                    </div>
+                      <div className="space-y-2">
+                        <Label>Description (Optional)</Label>
+                        <Textarea
+                          placeholder="Add details about what you accomplished..."
+                          value={taskDescription}
+                          onChange={(e) => setTaskDescription(e.target.value)}
+                          rows={3}
+                        />
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label>Status *</Label>
-                      <Select value={taskStatus} onValueChange={(value) => setTaskStatus(value as any)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="completed">Completed</SelectItem>
-                          <SelectItem value="in_progress">In Progress</SelectItem>
-                          <SelectItem value="todo">To Do</SelectItem>
-                          <SelectItem value="blocked">Blocked</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                      <div className="space-y-2">
+                        <Label>Status *</Label>
+                        <Select value={taskStatus} onValueChange={(value) => setTaskStatus(value as any)}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="completed">Completed</SelectItem>
+                            <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="todo">To Do</SelectItem>
+                            <SelectItem value="blocked">Blocked</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-                    <Button
-                      type="button"
-                      onClick={addTask}
-                      disabled={createTaskMutation.isPending}
-                      className="w-full"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      {createTaskMutation.isPending ? "Adding..." : "Add Task"}
-                    </Button>
-                  </div>
+                      <Button
+                        type="button"
+                        onClick={addTask}
+                        disabled={createTaskMutation.isPending}
+                        className="w-full"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        {createTaskMutation.isPending ? "Adding..." : "Add Task"}
+                      </Button>
+                    </div>
+                  )}
 
                   {allTasks.length > 0 && (
                     <div className="space-y-2">
@@ -620,7 +622,8 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
               <Button
                 onClick={handleClockOut}
                 disabled={clockOutMutation.isPending}
-                variant={isTargetMet ? "default" : isMinimumMet ? "secondary" : "destructive"}
+                variant="default"
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 {clockOutMutation.isPending ? (
                   <>
