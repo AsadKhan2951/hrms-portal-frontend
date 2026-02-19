@@ -143,7 +143,7 @@ export default function Account() {
             
             {/* Horizontal Scrollable Carousel */}
             <div className="relative mb-6">
-              <div className="flex gap-3 overflow-x-auto overflow-y-hidden pb-2 [-ms-overflow-style:'none'] [scrollbar-width:'none'] [&::-webkit-scrollbar]:hidden">
+              <div className="flex gap-3 overflow-x-auto overflow-y-hidden pb-2 justify-center pt-2 [-ms-overflow-style:'none'] [scrollbar-width:'none'] [&::-webkit-scrollbar]:hidden">
                 {SUPERHERO_AVATARS.map((avatar) => (
                   <button
                     key={avatar.id}
