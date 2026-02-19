@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { useAuth } from "../_core/hooks/useAuth";
 import { toast as showToast } from "sonner";
 import { CalendarIcon, Users, Clock, MapPin, Link as LinkIcon, FileText } from "lucide-react";
-import DashboardLayout from "../components/DashboardLayout";
+import LayoutWrapper from "@/components/LayoutWrapper";
 
 // Setup localizer for react-big-calendar
 const locales = {
@@ -137,7 +137,7 @@ export default function Calendar() {
   };
 
   return (
-    <DashboardLayout>
+    <LayoutWrapper>
     <div className="max-w-7xl mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
         <div>
@@ -267,7 +267,7 @@ export default function Calendar() {
         </DialogContent>
       </Dialog>
     </div>
-    </DashboardLayout>
+    </LayoutWrapper>
   );
 }
 
