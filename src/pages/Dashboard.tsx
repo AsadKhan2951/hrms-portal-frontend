@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useIsMobile } from "@/hooks/useMobile";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -107,7 +108,8 @@ export default function Dashboard() {
   const { theme, toggleTheme } = useTheme();
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const isMobile = useIsMobile();
   const [timeDialogOpen, setTimeDialogOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState("");
@@ -286,6 +288,12 @@ export default function Dashboard() {
         } bg-card border-r transition-all duration-300 flex flex-col fixed lg:relative inset-y-0 left-0 z-50 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
+        onMouseEnter={() => {
+          if (!isMobile) setSidebarCollapsed(false);
+        }}
+        onMouseLeave={() => {
+          if (!isMobile) setSidebarCollapsed(true);
+        }}
       >
         {/* Logo & Toggle */}
         <div className="p-4 border-b flex items-center justify-between">

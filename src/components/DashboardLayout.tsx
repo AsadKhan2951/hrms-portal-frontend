@@ -81,6 +81,7 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider
+      defaultOpen={false}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -105,7 +106,7 @@ function DashboardLayoutContent({
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
-  const { state, toggleSidebar } = useSidebar();
+  const { state, toggleSidebar, setOpen, isMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -167,7 +168,16 @@ function DashboardLayoutContent({
 
   return (
     <>
-      <div className="relative" ref={sidebarRef}>
+      <div
+        className="relative"
+        ref={sidebarRef}
+        onMouseEnter={() => {
+          if (!isMobile) setOpen(true);
+        }}
+        onMouseLeave={() => {
+          if (!isMobile && !isResizing) setOpen(false);
+        }}
+      >
         <Sidebar
           collapsible="icon"
           className="border-r-0"
@@ -188,6 +198,7 @@ function DashboardLayoutContent({
                     src="/radflow-logo.png"
                     alt="Rad.flow"
                     className="h-8 w-auto object-contain"
+                    style={{ width: "115px", height: "61px" }}
                   />
                 </div>
               ) : null}

@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { GlobalChatWidget } from "@/components/GlobalChatWidget";
+import { useIsMobile } from "@/hooks/useMobile";
 
 interface LayoutWrapperProps {
   children: ReactNode;
@@ -38,9 +39,10 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [location] = useLocation();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const isMobile = useIsMobile();
   const currentUserId = user?.id ? String(user.id) : null;
   useRealtime();
 
@@ -102,11 +104,22 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
         } bg-card border-r transition-all duration-300 flex flex-col fixed lg:relative inset-y-0 left-0 z-50 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
+        onMouseEnter={() => {
+          if (!isMobile) setSidebarCollapsed(false);
+        }}
+        onMouseLeave={() => {
+          if (!isMobile) setSidebarCollapsed(true);
+        }}
       >
         {/* Logo & Toggle */}
         <div className="p-4 border-b flex items-center justify-between">
           {!sidebarCollapsed && (
-            <img src="/radflow-logo.png" alt="Rad.flow" className="h-8" />
+            <img
+              src="/radflow-logo.png"
+              alt="Rad.flow"
+              className="h-8"
+              style={{ width: "115px", height: "61px" }}
+            />
           )}
           <Button
             variant="ghost"
@@ -203,7 +216,12 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
           >
             {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
-          <img src="/radflow-logo.png" alt="Rad.flow" className="h-8" />
+          <img
+            src="/radflow-logo.png"
+            alt="Rad.flow"
+            className="h-8"
+            style={{ width: "115px", height: "61px" }}
+          />
           <Button
             variant="ghost"
             size="icon"
