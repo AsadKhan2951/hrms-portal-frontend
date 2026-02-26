@@ -1,4 +1,4 @@
-import AdminLayout from "@/components/AdminLayout";
+﻿import AdminLayout from "@/components/AdminLayout";
 import { useState, useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,8 @@ import {
   Users,
   Calendar,
   CheckCircle2,
+  Trash2,
+  ClipboardList,
 } from "lucide-react";
 import { Redirect } from "wouter";
 import { toast } from "sonner";
@@ -46,9 +48,35 @@ export default function ProjectAssignment() {
   const { data: employeeData = [], isLoading: employeesLoading } = trpc.employees.list.useQuery();
   const employees = employeeData.filter((emp: any) => emp?.role === "user");
   const { data: projects = [], isLoading: projectsLoading } = trpc.admin.getProjectsOverview.useQuery();
+  const [dailyTasksDate, setDailyTasksDate] = useState(() => {
+    const now = new Date();
+    return now.toISOString().slice(0, 10);
+  });
+  const { data: dailyTasks = [], isLoading: dailyTasksLoading } = trpc.admin.getTasksByDate.useQuery({
+    date: new Date(`${dailyTasksDate}T00:00:00`),
+  });
   const assignProjectMutation = trpc.admin.assignProject.useMutation({
     onSuccess: () => {
       utils.admin.getProjectsOverview.invalidate();
+    },
+  });
+  const deleteProjectMutation = trpc.admin.deleteProject.useMutation({
+    onSuccess: () => {
+      utils.admin.getProjectsOverview.invalidate();
+      toast.success("Project removed");
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "Failed to remove project");
+    },
+  });
+  const deleteTaskMutation = trpc.admin.deleteTask.useMutation({
+    onSuccess: () => {
+      utils.admin.getTasksByDate.invalidate();
+      utils.admin.getProjectsOverview.invalidate();
+      toast.success("Task removed");
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "Failed to remove task");
     },
   });
 
@@ -222,6 +250,23 @@ export default function ProjectAssignment() {
                       <Button variant="outline" size="sm">
                         View Details
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                        onClick={() => {
+                          if (!project?.id) return;
+                          const confirmDelete = window.confirm(
+                            "Remove this project and all its tasks?"
+                          );
+                          if (!confirmDelete) return;
+                          deleteProjectMutation.mutate({ id: String(project.id) });
+                        }}
+                        disabled={deleteProjectMutation.isPending}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Remove
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -229,6 +274,86 @@ export default function ProjectAssignment() {
             ))
           )}
         </div>
+
+        <Card className="p-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <ClipboardList className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold">Daily Tasks</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="daily-tasks-date" className="text-sm text-muted-foreground">
+                Date
+              </Label>
+              <Input
+                id="daily-tasks-date"
+                type="date"
+                value={dailyTasksDate}
+                onChange={(e) => setDailyTasksDate(e.target.value)}
+                className="h-9"
+              />
+            </div>
+          </div>
+
+          {dailyTasksLoading ? (
+            <div className="text-center text-muted-foreground py-8">Loading tasks...</div>
+          ) : dailyTasks.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">
+              No tasks created for this date
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {dailyTasks.map((task: any) => (
+                <div
+                  key={task.id}
+                  className="rounded-xl border border-border/60 p-4 bg-muted/10"
+                >
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-semibold">{task.title}</h4>
+                        {getPriorityBadge(task.priority || "medium")}
+                        <Badge variant="outline" className="bg-blue-500/10 text-blue-500">
+                          {task.status || "todo"}
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Project: {task.project?.name || "Unknown"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {task.assignees?.length
+                          ? `Assignees: ${task.assignees
+                              .map((u: any) => u?.name || u?.employeeId || "Employee")
+                              .join(", ")}`
+                          : "Assignees: Unassigned"}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground">
+                        {task.createdAt ? new Date(task.createdAt).toLocaleTimeString() : "--"}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                        onClick={() => {
+                          if (!task?.id) return;
+                          const confirmDelete = window.confirm("Remove this task?");
+                          if (!confirmDelete) return;
+                          deleteTaskMutation.mutate({ id: String(task.id) });
+                        }}
+                        disabled={deleteTaskMutation.isPending}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
 
         <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -297,7 +422,7 @@ export default function ProjectAssignment() {
                           <div>
                             <p className="font-medium">{employee.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              {employee.employeeId || "--"} � {employee.department || "General"}
+                              {employee.employeeId || "--"} • {employee.department || "General"}
                             </p>
                           </div>
                         </label>
@@ -325,3 +450,4 @@ export default function ProjectAssignment() {
     </AdminLayout>
   );
 }
+

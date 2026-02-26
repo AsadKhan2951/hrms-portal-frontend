@@ -62,6 +62,14 @@ export default function EmployeeManagement() {
       utils.employees.list.invalidate();
     },
   });
+  const resetPasswordMutation = trpc.employees.resetPassword.useMutation({
+    onSuccess: () => {
+      toast.success("Password reset successfully");
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "Failed to reset password");
+    },
+  });
 
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
@@ -72,6 +80,7 @@ export default function EmployeeManagement() {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+  const [resetPasswordValue, setResetPasswordValue] = useState("");
   const [newEmployee, setNewEmployee] = useState({
     name: "",
     email: "",
@@ -125,6 +134,7 @@ export default function EmployeeManagement() {
   const handleViewDetails = (employee: any) => {
     setSelectedEmployee(employee);
     setEditableEmployee({ ...employee });
+    setResetPasswordValue("");
     setDetailsDialogOpen(true);
   };
 
@@ -634,6 +644,46 @@ export default function EmployeeManagement() {
                       <div>
                         <Label>Contract End Date</Label>
                         <Input type="date" />
+                      </div>
+                    </div>
+                  </Card>
+
+                  <Card className="p-4">
+                    <h3 className="font-semibold mb-4">Account Access</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                      <div>
+                        <Label>Reset Password</Label>
+                        <Input
+                          type="password"
+                          placeholder="Enter new temporary password"
+                          value={resetPasswordValue}
+                          onChange={(e) => setResetPasswordValue(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Minimum 6 characters. Employee will use this to sign in.
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-start md:justify-end">
+                        <Button
+                          onClick={() => {
+                            if (!selectedEmployee?.id) return;
+                            if (resetPasswordValue.trim().length < 6) {
+                              toast.error("Password must be at least 6 characters");
+                              return;
+                            }
+                            resetPasswordMutation.mutate({
+                              id: selectedEmployee.id,
+                              newPassword: resetPasswordValue.trim(),
+                            });
+                            setResetPasswordValue("");
+                          }}
+                          disabled={resetPasswordMutation.isPending || resetPasswordValue.trim().length < 6}
+                        >
+                          {resetPasswordMutation.isPending && (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          )}
+                          Reset Password
+                        </Button>
                       </div>
                     </div>
                   </Card>

@@ -45,6 +45,7 @@ import { addHours, format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, sta
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 import { GlobalChatWidget } from "@/components/GlobalChatWidget";
+import { NotesWidget } from "@/components/NotesWidget";
 import { NotificationSidebar } from "@/components/NotificationSidebar";
 import { CalendarSidebar } from "@/components/CalendarSidebar";
 import { QuickMeetingSidebar } from "@/components/QuickMeetingSidebar";
@@ -1268,6 +1269,7 @@ export default function Dashboard() {
       </Dialog>
 
       {/* Global Chat Widget */}
+      <NotesWidget />
       <GlobalChatWidget />
 
       {/* Notification Sidebar */}

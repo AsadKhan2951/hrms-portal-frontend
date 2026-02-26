@@ -12,23 +12,26 @@ import {
   FolderKanban,
   BarChart3,
   Calendar,
+  Clock,
   Menu,
   X,
-  Sun,
-  Moon,
   LogOut,
   Shield,
   Home,
   Search,
   Bell,
   MessageCircle,
-  Activity
+  Activity,
+  Settings,
+  Mail,
+  FileText
 } from "lucide-react";
 import { Link, useLocation, Redirect } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useRealtime } from "@/_core/hooks/useRealtime";
 import { toast } from "sonner";
 import { GlobalChatWidget } from "./GlobalChatWidget";
+import { NotesWidget } from "./NotesWidget";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -37,7 +40,7 @@ interface AdminLayoutProps {
 
 export default function AdminLayout({ children, title }: AdminLayoutProps) {
   const { user, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { toggleTheme } = useTheme();
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -87,6 +90,9 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
     { icon: Users, label: "Schedule Meeting", path: "/schedule-meeting" },
     { icon: Bell, label: "Announcements", path: "/admin/announcements" },
     { icon: BarChart3, label: "Reports", path: "/admin/reports" },
+    { icon: Clock, label: "Clock-Out Reports", path: "/admin/reports" },
+    { icon: Mail, label: "Email", path: "/chat" },
+    { icon: FileText, label: "Notes", path: "/forms" },
   ];
 
   const isActive = (path: string) => location === path;
@@ -144,7 +150,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
                 <Button
                   variant={isActive(item.path) ? "default" : "ghost"}
                   size="sm"
-                  className={`w-full justify-start ${!sidebarOpen && "justify-center px-2"}`}
+                  className={`w-full justify-start ${!sidebarOpen && "justify-center px-2"} ${isActive(item.path) ? "bg-primary text-primary-foreground" : ""}`}
                 >
                   <item.icon className="h-4 w-4 shrink-0" />
                   {sidebarOpen && <span className="ml-2 text-sm">{item.label}</span>}
@@ -195,7 +201,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
                   placeholder="Search employees, reports..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 w-64 h-9"
+                  className="pl-8 w-72 h-9 rounded-full bg-muted/40"
                 />
               </div>
 
@@ -245,7 +251,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
               </div>
 
               <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleTheme}>
-                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                <Settings className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -263,6 +269,8 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
           <GlobalChatWidget />
         </div>
       )}
+
+      <NotesWidget />
     </div>
   );
 }
