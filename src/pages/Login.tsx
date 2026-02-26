@@ -7,8 +7,10 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
 
 export default function Login() {
+  const { theme } = useTheme();
   const [employeeId, setEmployeeId] = useState("");
   const [password, setPassword] = useState("");
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
@@ -74,7 +76,11 @@ export default function Login() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <div className="flex justify-center mb-4">
-            <img src="/radflow-logo.png" alt="Rad.flow" className="h-16" />
+            <img
+              src={theme === "dark" ? "/radflow-logo-white.png" : "/radflow-logo.png"}
+              alt="Rad.flow"
+              className="h-16"
+            />
           </div>
           <CardDescription className="text-center">
             Enter your employee credentials to access the portal

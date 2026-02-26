@@ -43,6 +43,8 @@ export default function ProjectAssignment() {
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
   const [projectPriority, setProjectPriority] = useState("medium");
+  const [projectStartDate, setProjectStartDate] = useState("");
+  const [projectEndDate, setProjectEndDate] = useState("");
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
@@ -57,6 +59,9 @@ export default function ProjectAssignment() {
     assigneeIds: [] as string[],
   });
   const [employeeFilterId, setEmployeeFilterId] = useState("");
+  const [projectDetailsOpen, setProjectDetailsOpen] = useState(false);
+  const [projectDetails, setProjectDetails] = useState<any>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: employeeData = [], isLoading: employeesLoading } = trpc.employees.list.useQuery();
@@ -65,6 +70,10 @@ export default function ProjectAssignment() {
   const { data: projectTasks = [], isLoading: projectTasksLoading } = trpc.admin.getProjectTasks.useQuery(
     { projectId: selectedProjectId },
     { enabled: Boolean(selectedProjectId) }
+  );
+  const { data: detailTasks = [], isLoading: detailTasksLoading } = trpc.admin.getProjectTasks.useQuery(
+    { projectId: projectDetails?.id ? String(projectDetails.id) : "" },
+    { enabled: Boolean(projectDetails?.id) }
   );
   const [dailyTasksDate, setDailyTasksDate] = useState(() => {
     const now = new Date();
@@ -151,11 +160,21 @@ export default function ProjectAssignment() {
       toast.error("Please enter project name and select at least one employee");
       return;
     }
+    if (projectStartDate && projectEndDate) {
+      const start = new Date(`${projectStartDate}T00:00:00`);
+      const end = new Date(`${projectEndDate}T00:00:00`);
+      if (end < start) {
+        toast.error("Project end date must be after start date");
+        return;
+      }
+    }
     await assignProjectMutation.mutateAsync({
       name: projectName,
       description: projectDescription,
       priority: projectPriority as "low" | "medium" | "high",
       employeeIds: selectedEmployees,
+      startDate: projectStartDate ? new Date(`${projectStartDate}T00:00:00`) : undefined,
+      endDate: projectEndDate ? new Date(`${projectEndDate}T00:00:00`) : undefined,
     });
     toast.success(`Project assigned to ${selectedEmployees.length} employee(s)`);
     setAssignDialogOpen(false);
@@ -166,6 +185,8 @@ export default function ProjectAssignment() {
     setProjectName("");
     setProjectDescription("");
     setProjectPriority("medium");
+    setProjectStartDate("");
+    setProjectEndDate("");
     setSelectedEmployees([]);
   };
 
@@ -263,6 +284,11 @@ export default function ProjectAssignment() {
     });
   };
 
+  const handleViewProjectDetails = (project: any) => {
+    setProjectDetails(project);
+    setProjectDetailsOpen(true);
+  };
+
   const getPriorityBadge = (priority: string) => {
     const config: Record<string, { className: string }> = {
       high: { className: "bg-red-500/10 text-red-500" },
@@ -279,6 +305,8 @@ export default function ProjectAssignment() {
     );
   };
 
+  const isArchivedProject = (status?: string) =>
+    status === "completed" || status === "cancelled";
   const activeProjects = useMemo(
     () => projects.filter((project: any) => project.status === "active"),
     [projects]
@@ -286,6 +314,14 @@ export default function ProjectAssignment() {
   const completedProjects = useMemo(
     () => projects.filter((project: any) => project.status === "completed"),
     [projects]
+  );
+  const archivedProjects = useMemo(
+    () => projects.filter((project: any) => isArchivedProject(project.status)),
+    [projects]
+  );
+  const visibleProjects = useMemo(
+    () => (showArchived ? projects : projects.filter((project: any) => !isArchivedProject(project.status))),
+    [projects, showArchived]
   );
 
   return (
@@ -342,21 +378,34 @@ export default function ProjectAssignment() {
           </Card>
         </div>
 
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="text-sm text-muted-foreground">
+            {visibleProjects.length} project(s) shown
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={showArchived}
+              onCheckedChange={(value) => setShowArchived(Boolean(value))}
+            />
+            Show archived projects ({archivedProjects.length})
+          </label>
+        </div>
+
         <div className="grid gap-4">
           {projectsLoading ? (
             <Card className="p-12">
               <div className="text-center text-muted-foreground">Loading projects...</div>
             </Card>
-          ) : projects.length === 0 ? (
+          ) : visibleProjects.length === 0 ? (
             <Card className="p-12">
               <div className="text-center text-muted-foreground">
                 <FolderKanban className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No projects assigned yet</p>
-                <p className="text-sm mt-1">Create and assign your first project</p>
+                <p>No projects to show</p>
+                <p className="text-sm mt-1">Try enabling archived projects</p>
               </div>
             </Card>
           ) : (
-            projects.map((project: any) => (
+            visibleProjects.map((project: any) => (
               <Card key={project.id} className="p-6">
                 <div className="flex flex-col gap-4">
                   <div className="flex items-start justify-between">
@@ -388,14 +437,25 @@ export default function ProjectAssignment() {
                   <div className="flex items-center justify-between pt-4 border-t">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Calendar className="h-3 w-3" />
-                      Created on {project.createdAt ? new Date(project.createdAt).toLocaleDateString() : "--"}
+                      {project.startDate || project.endDate ? (
+                        <>
+                          {project.startDate ? new Date(project.startDate).toLocaleDateString() : "--"} -{" "}
+                          {project.endDate ? new Date(project.endDate).toLocaleDateString() : "--"}
+                        </>
+                      ) : (
+                        <>Created on {project.createdAt ? new Date(project.createdAt).toLocaleDateString() : "--"}</>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2">
                       <Button variant="outline" size="sm">
                         Edit
                       </Button>
-                      <Button variant="outline" size="sm">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewProjectDetails(project)}
+                      >
                         View Details
                       </Button>
                       <Button
@@ -752,6 +812,25 @@ export default function ProjectAssignment() {
                 </Select>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Start Date</Label>
+                  <Input
+                    type="date"
+                    value={projectStartDate}
+                    onChange={(e) => setProjectStartDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>End Date</Label>
+                  <Input
+                    type="date"
+                    value={projectEndDate}
+                    onChange={(e) => setProjectEndDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label>Assign To Employees *</Label>
                 <div className="border rounded-lg p-4 space-y-3 max-h-64 overflow-y-auto">
@@ -774,7 +853,7 @@ export default function ProjectAssignment() {
                           <div>
                             <p className="font-medium">{employee.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              {employee.employeeId || "--"} • {employee.department || "General"}
+                              {employee.employeeId || "--"} - {employee.department || "General"}
                             </p>
                           </div>
                         </label>
@@ -960,6 +1039,102 @@ export default function ProjectAssignment() {
                   : editingTask
                     ? "Update Task"
                     : "Create Task"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={projectDetailsOpen} onOpenChange={setProjectDetailsOpen}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Project Details</DialogTitle>
+              <DialogDescription>
+                {projectDetails?.name || "Project information and tasks"}
+              </DialogDescription>
+            </DialogHeader>
+
+            {!projectDetails ? (
+              <div className="text-center text-muted-foreground py-8">No project selected</div>
+            ) : (
+              <div className="space-y-4">
+                <Card className="p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">{projectDetails.name}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {projectDetails.description || "No description"}
+                      </p>
+                      <div className="flex items-center gap-2 mt-3">
+                        {getPriorityBadge(projectDetails.priority || "medium")}
+                        <Badge variant="outline" className="bg-blue-500/10 text-blue-500">
+                          {projectDetails.status || "active"}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="text-xs text-muted-foreground text-right">
+                      <div>Timeline</div>
+                      <div>
+                        {projectDetails.startDate
+                          ? new Date(projectDetails.startDate).toLocaleDateString()
+                          : "--"}{" "}
+                        -{" "}
+                        {projectDetails.endDate
+                          ? new Date(projectDetails.endDate).toLocaleDateString()
+                          : "--"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 text-xs text-muted-foreground">
+                    Assigned: {projectDetails.assignees?.join(", ") || "Unassigned"}
+                  </div>
+                </Card>
+
+                <Card className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-semibold text-sm">Tasks</h4>
+                    <Badge variant="secondary" className="text-xs">
+                      {detailTasks.length}
+                    </Badge>
+                  </div>
+                  {detailTasksLoading ? (
+                    <div className="text-center text-muted-foreground py-6">Loading tasks...</div>
+                  ) : detailTasks.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-6">No tasks found</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {detailTasks.map((task: any) => (
+                        <div key={task.id} className="p-3 rounded-lg border bg-muted/20">
+                          <div className="flex items-center justify-between">
+                            <div className="font-medium text-sm">{task.title}</div>
+                            <Badge variant="outline" className="text-xs">
+                              {task.status || "todo"}
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Assignees:{" "}
+                            {Array.isArray(task.assignees) && task.assignees.length > 0
+                              ? task.assignees
+                                  .map((u: any) => u?.name || u?.employeeId || "Employee")
+                                  .join(", ")
+                              : "Unassigned"}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Timeline:{" "}
+                            {task.completionDate
+                              ? new Date(task.completionDate).toLocaleDateString()
+                              : "Ongoing"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setProjectDetailsOpen(false)}>
+                Close
               </Button>
             </DialogFooter>
           </DialogContent>

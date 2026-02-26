@@ -90,6 +90,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
     { icon: Users, label: "Schedule Meeting", path: "/schedule-meeting" },
     { icon: Bell, label: "Announcements", path: "/admin/announcements" },
     { icon: BarChart3, label: "Reports", path: "/admin/reports" },
+    { icon: BarChart3, label: "Employee Reports", path: "/reports" },
     { icon: Clock, label: "Clock-Out Reports", path: "/admin/reports" },
     { icon: Mail, label: "Email", path: "/chat" },
     { icon: FileText, label: "Notes", path: "/forms" },

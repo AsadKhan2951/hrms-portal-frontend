@@ -26,6 +26,7 @@ import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
+import { useTheme } from "@/contexts/ThemeContext";
 
 // Menu items will be generated dynamically based on user role in the component
 
@@ -105,6 +106,7 @@ function DashboardLayoutContent({
   setSidebarWidth,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
+  const { theme } = useTheme();
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar, setOpen } = useSidebar();
   const isCollapsed = state === "collapsed";
@@ -129,6 +131,7 @@ function DashboardLayoutContent({
   ];
 
   const activeMenuItem = menuItems.find(item => item.path === location);
+  const logoSrc = theme === "dark" ? "/radflow-logo-white.png" : "/radflow-logo.png";
 
   useEffect(() => {
     if (isCollapsed) {
@@ -195,7 +198,7 @@ function DashboardLayoutContent({
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
                   <img
-                    src="/radflow-logo.png"
+                    src={logoSrc}
                     alt="Rad.flow"
                     className="h-8 w-auto object-contain"
                     style={{ width: "115px", height: "61px" }}

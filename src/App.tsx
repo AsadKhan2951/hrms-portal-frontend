@@ -15,6 +15,7 @@ import Attendance from "./pages/Attendance";
 import Forms from "./pages/Forms";
 import Projects from "./pages/Projects";
 import Notifications from "./pages/Notifications";
+import Reports from "./pages/Reports";
 import AdminDashboard from "./pages/AdminDashboard";
 import EmployeeManagement from "./pages/admin/EmployeeManagement";
 import LeaveApproval from "./pages/admin/LeaveApproval";
@@ -76,6 +77,9 @@ function Router() {
       </Route>
       <Route path="/projects">
         {() => <ProtectedRoute component={Projects} />}
+      </Route>
+      <Route path="/reports">
+        {() => <ProtectedRoute component={Reports} />}
       </Route>
       <Route path="/notifications" component={() => <ProtectedRoute component={Notifications} />} />
           <Route path="/calendar" component={() => <ProtectedRoute component={Calendar} />} />
