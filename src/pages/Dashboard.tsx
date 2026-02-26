@@ -5,6 +5,7 @@ import { useIsMobile } from "@/hooks/useMobile";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { TimeInOutDialog } from "@/components/TimeInOutDialog";
 import { getAvatarById } from "@shared/avatars";
@@ -35,9 +36,10 @@ import {
   Loader2,
   BarChart3,
   List,
+  Plus,
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { format, startOfMonth, endOfMonth, subDays } from "date-fns";
+import { addHours, format, startOfMonth, endOfMonth, subDays } from "date-fns";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 import { GlobalChatWidget } from "@/components/GlobalChatWidget";
@@ -123,6 +125,20 @@ export default function Dashboard() {
   const [calendarSidebarOpen, setCalendarSidebarOpen] = useState(false);
   const [meetingSidebarOpen, setMeetingSidebarOpen] = useState(false);
   const [attendanceView, setAttendanceView] = useState<'graph' | 'list'>('graph');
+  const initialWorkSession = useMemo(() => {
+    const now = new Date();
+    return {
+      date: format(now, "yyyy-MM-dd"),
+      start: format(now, "HH:mm"),
+      end: format(addHours(now, 2), "HH:mm"),
+    };
+  }, []);
+  const [workSessionOpen, setWorkSessionOpen] = useState(false);
+  const [workSessionDate, setWorkSessionDate] = useState(initialWorkSession.date);
+  const [workSessionStart, setWorkSessionStart] = useState(initialWorkSession.start);
+  const [workSessionEnd, setWorkSessionEnd] = useState(initialWorkSession.end);
+  const [workSessionType, setWorkSessionType] = useState<"remote" | "onsite">("remote");
+  const [workSessionDescription, setWorkSessionDescription] = useState("");
   const currentUserId = user?.id ? String(user.id) : null;
 
   const handleLogout = async () => {
@@ -188,6 +204,34 @@ export default function Dashboard() {
   const { data: myProjects } = trpc.projects.getMyProjects.useQuery();
 
   const utils = trpc.useUtils();
+
+  const resetWorkSessionForm = () => {
+    const now = new Date();
+    setWorkSessionDate(format(now, "yyyy-MM-dd"));
+    setWorkSessionStart(format(now, "HH:mm"));
+    setWorkSessionEnd(format(addHours(now, 2), "HH:mm"));
+    setWorkSessionType("remote");
+    setWorkSessionDescription("");
+  };
+
+  const buildDateTime = (dateValue: string, timeValue: string) => {
+    if (!dateValue || !timeValue) return null;
+    const [year, month, day] = dateValue.split("-").map(Number);
+    const [hour, minute] = timeValue.split(":").map(Number);
+    if (!year || !month || !day || Number.isNaN(hour) || Number.isNaN(minute)) return null;
+    return new Date(year, month - 1, day, hour, minute);
+  };
+
+  const addWorkSessionMutation = trpc.timeTracking.addWorkSession.useMutation({
+    onSuccess: () => {
+      toast.success("Work session added");
+      setWorkSessionOpen(false);
+      resetWorkSessionForm();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to add work session");
+    },
+  });
 
   const startBreakMutation = trpc.timeTracking.startBreak.useMutation({
     onSuccess: () => {
@@ -462,6 +506,19 @@ export default function Dashboard() {
                   className="transition-all hover:scale-110 hover:shadow-lg"
                 >
                   <Users className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    resetWorkSessionForm();
+                    setWorkSessionOpen(true);
+                  }}
+                  title={activeEntry ? "Clock out to add a work session" : "Add Work Session"}
+                  className="transition-all hover:scale-110 hover:shadow-lg"
+                  disabled={Boolean(activeEntry)}
+                >
+                  <Plus className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="outline"
@@ -747,6 +804,111 @@ export default function Dashboard() {
 
       {/* Time In/Out Dialog */}
       <TimeInOutDialog open={timeDialogOpen} onOpenChange={setTimeDialogOpen} />
+
+      {/* Add Work Session Dialog */}
+      <Dialog open={workSessionOpen} onOpenChange={setWorkSessionOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Work Session</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Date *</Label>
+              <Input
+                type="date"
+                value={workSessionDate}
+                onChange={(e) => setWorkSessionDate(e.target.value)}
+                max={format(new Date(), "yyyy-MM-dd")}
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Start Time *</Label>
+                <Input
+                  type="time"
+                  value={workSessionStart}
+                  onChange={(e) => setWorkSessionStart(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>End Time *</Label>
+                <Input
+                  type="time"
+                  value={workSessionEnd}
+                  onChange={(e) => setWorkSessionEnd(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Session Type *</Label>
+              <Select value={workSessionType} onValueChange={(value) => setWorkSessionType(value as "remote" | "onsite")}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select session type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="remote">Remote</SelectItem>
+                  <SelectItem value="onsite">Onsite</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Description (Optional)</Label>
+              <Textarea
+                value={workSessionDescription}
+                onChange={(e) => setWorkSessionDescription(e.target.value)}
+                placeholder="What did you work on?"
+                className="min-h-[90px]"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setWorkSessionOpen(false)}
+                disabled={addWorkSessionMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  const start = buildDateTime(workSessionDate, workSessionStart);
+                  const end = buildDateTime(workSessionDate, workSessionEnd);
+
+                  if (!start || !end) {
+                    toast.error("Please select date and time");
+                    return;
+                  }
+                  if (end <= start) {
+                    toast.error("End time must be after start time");
+                    return;
+                  }
+
+                  addWorkSessionMutation.mutate({
+                    startTime: start,
+                    endTime: end,
+                    sessionType: workSessionType,
+                    description: workSessionDescription.trim() || undefined,
+                  });
+                }}
+                disabled={
+                  addWorkSessionMutation.isPending ||
+                  !workSessionDate ||
+                  !workSessionStart ||
+                  !workSessionEnd
+                }
+              >
+                {addWorkSessionMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  "Add Session"
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Break Reason Dialog */}
       <Dialog open={breakDialogOpen} onOpenChange={setBreakDialogOpen}>
