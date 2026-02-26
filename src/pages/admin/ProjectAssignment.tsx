@@ -30,6 +30,7 @@ import {
   CheckCircle2,
   Trash2,
   ClipboardList,
+  Edit,
 } from "lucide-react";
 import { Redirect } from "wouter";
 import { toast } from "sonner";
@@ -43,11 +44,28 @@ export default function ProjectAssignment() {
   const [projectDescription, setProjectDescription] = useState("");
   const [projectPriority, setProjectPriority] = useState("medium");
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<any>(null);
+  const [taskForm, setTaskForm] = useState({
+    title: "",
+    description: "",
+    priority: "medium",
+    status: "todo",
+    completionDate: "",
+    isOngoing: false,
+    assigneeIds: [] as string[],
+  });
+  const [employeeFilterId, setEmployeeFilterId] = useState("");
 
   const utils = trpc.useUtils();
   const { data: employeeData = [], isLoading: employeesLoading } = trpc.employees.list.useQuery();
   const employees = employeeData.filter((emp: any) => emp?.role === "user");
   const { data: projects = [], isLoading: projectsLoading } = trpc.admin.getProjectsOverview.useQuery();
+  const { data: projectTasks = [], isLoading: projectTasksLoading } = trpc.admin.getProjectTasks.useQuery(
+    { projectId: selectedProjectId },
+    { enabled: Boolean(selectedProjectId) }
+  );
   const [dailyTasksDate, setDailyTasksDate] = useState(() => {
     const now = new Date();
     return now.toISOString().slice(0, 10);
@@ -55,6 +73,14 @@ export default function ProjectAssignment() {
   const { data: dailyTasks = [], isLoading: dailyTasksLoading } = trpc.admin.getTasksByDate.useQuery({
     date: new Date(`${dailyTasksDate}T00:00:00`),
   });
+  const { data: employeeProjects = [] } = trpc.admin.getEmployeeProjects.useQuery(
+    { employeeId: employeeFilterId },
+    { enabled: Boolean(employeeFilterId) }
+  );
+  const { data: employeeTasks = [] } = trpc.admin.getEmployeeTasks.useQuery(
+    { employeeId: employeeFilterId },
+    { enabled: Boolean(employeeFilterId) }
+  );
   const assignProjectMutation = trpc.admin.assignProject.useMutation({
     onSuccess: () => {
       utils.admin.getProjectsOverview.invalidate();
@@ -73,10 +99,46 @@ export default function ProjectAssignment() {
     onSuccess: () => {
       utils.admin.getTasksByDate.invalidate();
       utils.admin.getProjectsOverview.invalidate();
+      utils.admin.getProjectTasks.invalidate();
       toast.success("Task removed");
     },
     onError: (error: any) => {
       toast.error(error?.message || "Failed to remove task");
+    },
+  });
+  const createTaskMutation = trpc.admin.createTaskForProject.useMutation({
+    onSuccess: () => {
+      utils.admin.getProjectTasks.invalidate();
+      utils.admin.getEmployeeTasks.invalidate();
+      utils.admin.getEmployeeProjects.invalidate();
+      toast.success("Task created");
+      setTaskDialogOpen(false);
+      setEditingTask(null);
+      setTaskForm({
+        title: "",
+        description: "",
+        priority: "medium",
+        status: "todo",
+        completionDate: "",
+        isOngoing: false,
+        assigneeIds: [],
+      });
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "Failed to create task");
+    },
+  });
+  const updateTaskMutation = trpc.admin.updateTaskForProject.useMutation({
+    onSuccess: () => {
+      utils.admin.getProjectTasks.invalidate();
+      utils.admin.getEmployeeTasks.invalidate();
+      utils.admin.getEmployeeProjects.invalidate();
+      toast.success("Task updated");
+      setTaskDialogOpen(false);
+      setEditingTask(null);
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "Failed to update task");
     },
   });
 
@@ -113,6 +175,92 @@ export default function ProjectAssignment() {
         ? prev.filter(id => id !== employeeId)
         : [...prev, employeeId]
     );
+  };
+
+  const toDateInput = (value?: string | Date) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toISOString().slice(0, 10);
+  };
+
+  const resetTaskForm = () => {
+    setTaskForm({
+      title: "",
+      description: "",
+      priority: "medium",
+      status: "todo",
+      completionDate: "",
+      isOngoing: false,
+      assigneeIds: [],
+    });
+  };
+
+  const handleCreateTask = () => {
+    if (!selectedProjectId) {
+      toast.error("Please select a project first");
+      return;
+    }
+    setEditingTask(null);
+    resetTaskForm();
+    setTaskDialogOpen(true);
+  };
+
+  const handleEditTask = (task: any) => {
+    setEditingTask(task);
+    setTaskForm({
+      title: task.title || "",
+      description: task.description || "",
+      priority: task.priority || "medium",
+      status: task.status || "todo",
+      completionDate: toDateInput(task.completionDate),
+      isOngoing: !task.completionDate,
+      assigneeIds: Array.isArray(task.assignees)
+        ? task.assignees.map((u: any) => String(u.id)).filter(Boolean)
+        : [],
+    });
+    setTaskDialogOpen(true);
+  };
+
+  const handleSaveTask = () => {
+    if (!selectedProjectId) {
+      toast.error("Please select a project first");
+      return;
+    }
+    if (!taskForm.title.trim()) {
+      toast.error("Task title is required");
+      return;
+    }
+    if (taskForm.assigneeIds.length === 0) {
+      toast.error("Select at least one assignee");
+      return;
+    }
+    const completionDate = taskForm.isOngoing || !taskForm.completionDate
+      ? undefined
+      : new Date(`${taskForm.completionDate}T00:00:00`);
+
+    if (editingTask?.id) {
+      updateTaskMutation.mutate({
+        taskId: editingTask.id,
+        title: taskForm.title.trim(),
+        description: taskForm.description || undefined,
+        priority: taskForm.priority as "low" | "medium" | "high",
+        status: taskForm.status as "todo" | "in_progress" | "completed" | "blocked",
+        assigneeIds: taskForm.assigneeIds,
+        completionDate,
+      });
+      return;
+    }
+
+    createTaskMutation.mutate({
+      projectId: selectedProjectId,
+      title: taskForm.title.trim(),
+      description: taskForm.description || undefined,
+      priority: taskForm.priority as "low" | "medium" | "high",
+      status: taskForm.status as "todo" | "in_progress" | "completed" | "blocked",
+      assigneeIds: taskForm.assigneeIds,
+      completionDate,
+    });
   };
 
   const getPriorityBadge = (priority: string) => {
@@ -274,6 +422,210 @@ export default function ProjectAssignment() {
             ))
           )}
         </div>
+
+        <Card className="p-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+            <div>
+              <h3 className="text-lg font-semibold">Project Tasks Manager</h3>
+              <p className="text-sm text-muted-foreground">
+                Add, update, and assign tasks for any project
+              </p>
+            </div>
+            <Button onClick={handleCreateTask}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Task
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="space-y-2">
+              <Label>Select Project</Label>
+              <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.length === 0 ? (
+                    <SelectItem value="none" disabled>
+                      No projects available
+                    </SelectItem>
+                  ) : (
+                    projects.map((project: any) => (
+                      <SelectItem key={project.id} value={String(project.id)}>
+                        {project.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {!selectedProjectId ? (
+            <div className="text-center text-muted-foreground py-8">
+              Select a project to manage tasks
+            </div>
+          ) : projectTasksLoading ? (
+            <div className="text-center text-muted-foreground py-8">Loading tasks...</div>
+          ) : projectTasks.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">
+              No tasks for this project yet
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {projectTasks.map((task: any) => (
+                <div key={task.id} className="rounded-xl border border-border/60 p-4 bg-muted/10">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-semibold">{task.title}</h4>
+                        {getPriorityBadge(task.priority || "medium")}
+                        <Badge variant="outline" className="bg-blue-500/10 text-blue-500">
+                          {task.status || "todo"}
+                        </Badge>
+                      </div>
+                      {task.description && (
+                        <div className="text-sm text-muted-foreground">{task.description}</div>
+                      )}
+                      <div className="text-xs text-muted-foreground">
+                        Assignees:{" "}
+                        {Array.isArray(task.assignees) && task.assignees.length > 0
+                          ? task.assignees
+                              .map((u: any) => u?.name || u?.employeeId || "Employee")
+                              .join(", ")
+                          : "Unassigned"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Completion:{" "}
+                        {task.completionDate
+                          ? new Date(task.completionDate).toLocaleDateString()
+                          : "Ongoing"}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditTask(task)}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                        onClick={() => {
+                          if (!task?.id) return;
+                          const confirmDelete = window.confirm("Remove this task?");
+                          if (!confirmDelete) return;
+                          deleteTaskMutation.mutate({ id: String(task.id) });
+                        }}
+                        disabled={deleteTaskMutation.isPending}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+            <div>
+              <h3 className="text-lg font-semibold">Employee Wise View</h3>
+              <p className="text-sm text-muted-foreground">
+                View projects and tasks assigned to a specific employee
+              </p>
+            </div>
+            <div className="min-w-[220px]">
+              <Select value={employeeFilterId} onValueChange={setEmployeeFilterId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {employeesLoading ? (
+                    <SelectItem value="none" disabled>
+                      Loading employees...
+                    </SelectItem>
+                  ) : employees.length === 0 ? (
+                    <SelectItem value="none" disabled>
+                      No employees available
+                    </SelectItem>
+                  ) : (
+                    employees.map((emp: any) => (
+                      <SelectItem key={emp.id} value={String(emp.id)}>
+                        {emp.name} ({emp.employeeId || "ID"})
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {!employeeFilterId ? (
+            <div className="text-center text-muted-foreground py-8">
+              Select an employee to view assigned projects and tasks
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-sm">Projects</h4>
+                  <Badge variant="secondary" className="text-xs">{employeeProjects.length}</Badge>
+                </div>
+                {employeeProjects.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No projects assigned</div>
+                ) : (
+                  <div className="space-y-2">
+                    {employeeProjects.map((project: any) => (
+                      <div key={project.id} className="p-3 rounded-lg border bg-muted/20">
+                        <div className="flex items-center justify-between">
+                          <div className="font-medium text-sm">{project.name}</div>
+                          {getPriorityBadge(project.priority || "medium")}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Status: {project.status || "active"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              <Card className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-sm">Tasks</h4>
+                  <Badge variant="secondary" className="text-xs">{employeeTasks.length}</Badge>
+                </div>
+                {employeeTasks.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No tasks assigned</div>
+                ) : (
+                  <div className="space-y-2">
+                    {employeeTasks.map((task: any) => (
+                      <div key={task.id} className="p-3 rounded-lg border bg-muted/20">
+                        <div className="flex items-center justify-between">
+                          <div className="font-medium text-sm">{task.title}</div>
+                          <Badge variant="outline" className="text-xs">
+                            {task.status || "todo"}
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Project: {task.project?.name || "Unknown"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </div>
+          )}
+        </Card>
 
         <Card className="p-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
@@ -442,6 +794,172 @@ export default function ProjectAssignment() {
               </Button>
               <Button onClick={handleAssignProject} disabled={assignProjectMutation.isPending}>
                 {assignProjectMutation.isPending ? "Assigning..." : "Assign Project"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editingTask ? "Update Task" : "Add Task"}</DialogTitle>
+              <DialogDescription>
+                {editingTask ? "Update task details and assignments" : "Create a new task for the selected project"}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label>Task Title *</Label>
+                <Input
+                  value={taskForm.title}
+                  onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
+                  placeholder="Enter task title"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Textarea
+                  value={taskForm.description}
+                  onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
+                  placeholder="Add task details"
+                  rows={3}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Priority</Label>
+                  <Select
+                    value={taskForm.priority}
+                    onValueChange={(value) =>
+                      setTaskForm({ ...taskForm, priority: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={taskForm.status}
+                    onValueChange={(value) =>
+                      setTaskForm({ ...taskForm, status: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todo">Todo</SelectItem>
+                      <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="blocked">Blocked</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Completion Date</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={taskForm.completionDate}
+                    onChange={(e) =>
+                      setTaskForm({ ...taskForm, completionDate: e.target.value })
+                    }
+                    disabled={taskForm.isOngoing}
+                  />
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
+                    <Checkbox
+                      checked={taskForm.isOngoing}
+                      onCheckedChange={(value) =>
+                        setTaskForm({ ...taskForm, isOngoing: Boolean(value) })
+                      }
+                    />
+                    Ongoing
+                  </label>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Assign Employees *</Label>
+                <Select
+                  onValueChange={(value) => {
+                    if (!taskForm.assigneeIds.includes(value)) {
+                      setTaskForm({
+                        ...taskForm,
+                        assigneeIds: [...taskForm.assigneeIds, value],
+                      });
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select employees" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.length === 0 ? (
+                      <SelectItem value="none" disabled>
+                        No employees available
+                      </SelectItem>
+                    ) : (
+                      employees.map((emp: any) => (
+                        <SelectItem key={emp.id} value={String(emp.id)}>
+                          {emp.name} ({emp.employeeId || "ID"})
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {taskForm.assigneeIds.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {taskForm.assigneeIds.map((id) => {
+                      const emp = employees.find((e: any) => String(e.id) === String(id));
+                      const label = emp?.name || "Employee";
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          className="text-xs px-2 py-1 rounded-full bg-secondary hover:bg-secondary/80"
+                          onClick={() =>
+                            setTaskForm({
+                              ...taskForm,
+                              assigneeIds: taskForm.assigneeIds.filter((eid) => eid !== id),
+                            })
+                          }
+                        >
+                          {label} x
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTaskDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveTask}
+                disabled={createTaskMutation.isPending || updateTaskMutation.isPending}
+              >
+                {createTaskMutation.isPending || updateTaskMutation.isPending
+                  ? "Saving..."
+                  : editingTask
+                    ? "Update Task"
+                    : "Create Task"}
               </Button>
             </DialogFooter>
           </DialogContent>
