@@ -37,6 +37,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 
 export default function Projects() {
   const { user } = useAuth();
+  const currentUserId = user?.id ? String(user.id) : null;
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [showTaskDialog, setShowTaskDialog] = useState(false);
   const [showProjectDialog, setShowProjectDialog] = useState(false);
@@ -55,10 +56,12 @@ export default function Projects() {
     title: string;
     description: string;
     priority: "low" | "medium" | "high";
+    assigneeIds: string[];
   }>({
     title: "",
     description: "",
     priority: "medium",
+    assigneeIds: [],
   });
 
   const { data: projects, isLoading: projectsLoading } = trpc.projects.getMyProjects.useQuery();
@@ -86,7 +89,12 @@ export default function Projects() {
     onSuccess: () => {
       toast.success("Task created successfully!");
       setShowTaskDialog(false);
-      setTaskData({ title: "", description: "", priority: "medium" });
+      setTaskData({
+        title: "",
+        description: "",
+        priority: "medium",
+        assigneeIds: currentUserId ? [currentUserId] : [],
+      });
       utils.projects.getTasks.invalidate();
     },
     onError: (error) => {
@@ -178,6 +186,21 @@ export default function Projects() {
     return employees.filter((emp: any) => String(emp.id) !== currentId);
   }, [employees, user]);
 
+  const assignableEmployees = useMemo(() => {
+    if (!employees) return [];
+    return employees.filter((emp: any) => emp && emp.id && emp.role !== "admin");
+  }, [employees]);
+
+  const handleOpenTaskDialog = () => {
+    setTaskData({
+      title: "",
+      description: "",
+      priority: "medium",
+      assigneeIds: currentUserId ? [currentUserId] : [],
+    });
+    setShowTaskDialog(true);
+  };
+
   return (
     <LayoutWrapper>
       <div className="space-y-4">
@@ -248,7 +271,7 @@ export default function Projects() {
                 <Card>
                   <div className="p-4 border-b flex items-center justify-between">
                     <h2 className="text-lg font-semibold">Tasks</h2>
-                    <Button size="sm" onClick={() => setShowTaskDialog(true)}>
+                    <Button size="sm" onClick={handleOpenTaskDialog}>
                       <Plus className="h-4 w-4 mr-2" />
                       Add Task
                     </Button>
@@ -519,6 +542,63 @@ export default function Projects() {
                       <SelectItem value="high">High</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Assign Employees</Label>
+                  <Select
+                    onValueChange={(value) => {
+                      if (!taskData.assigneeIds.includes(value)) {
+                        setTaskData({
+                          ...taskData,
+                          assigneeIds: [...taskData.assigneeIds, value],
+                        });
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select employees" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {assignableEmployees.length === 0 ? (
+                        <SelectItem value="none" disabled>
+                          No employees available
+                        </SelectItem>
+                      ) : (
+                        assignableEmployees.map((emp: any) => (
+                          <SelectItem key={emp.id} value={String(emp.id)}>
+                            {emp.name} ({emp.employeeId || "ID"})
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {taskData.assigneeIds.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {taskData.assigneeIds.map((id) => {
+                        const emp = assignableEmployees.find((e: any) => String(e.id) === String(id));
+                        const label = emp?.name || (String(id) === String(currentUserId) ? "You" : "Employee");
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            className="text-xs px-2 py-1 rounded-full bg-secondary hover:bg-secondary/80"
+                            onClick={() =>
+                              setTaskData({
+                                ...taskData,
+                                assigneeIds: taskData.assigneeIds.filter((eid) => eid !== id),
+                              })
+                            }
+                          >
+                            {label} Ã—
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    If no one is selected, you will be assigned automatically.
+                  </p>
                 </div>
               </div>
 

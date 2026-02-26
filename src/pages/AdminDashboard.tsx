@@ -331,7 +331,12 @@ export default function AdminDashboard() {
                     {task.priority}
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground mb-1">{task.assignee?.name || "Employee"}</p>
+                <p className="text-xs text-muted-foreground mb-1">
+                  {(task.assignees || [])
+                    .map((assignee: any) => assignee?.name || assignee?.employeeId || "Employee")
+                    .filter(Boolean)
+                    .join(", ") || "Employee"}
+                </p>
                 <p className="text-xs text-muted-foreground">{task.project?.name || "Project"}</p>
               </div>
             ))}
