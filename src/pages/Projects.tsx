@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -57,11 +58,15 @@ export default function Projects() {
     description: string;
     priority: "low" | "medium" | "high";
     assigneeIds: string[];
+    completionDate: string;
+    isOngoing: boolean;
   }>({
     title: "",
     description: "",
     priority: "medium",
     assigneeIds: [],
+    completionDate: format(new Date(), "yyyy-MM-dd"),
+    isOngoing: false,
   });
 
   const { data: projects, isLoading: projectsLoading } = trpc.projects.getMyProjects.useQuery();
@@ -94,6 +99,8 @@ export default function Projects() {
         description: "",
         priority: "medium",
         assigneeIds: currentUserId ? [currentUserId] : [],
+        completionDate: format(new Date(), "yyyy-MM-dd"),
+        isOngoing: false,
       });
       utils.projects.getTasks.invalidate();
     },
@@ -124,6 +131,9 @@ export default function Projects() {
     createTaskMutation.mutate({
       projectId: selectedProject,
       ...taskData,
+      completionDate: taskData.isOngoing || !taskData.completionDate
+        ? undefined
+        : new Date(`${taskData.completionDate}T00:00:00`),
     });
   };
 
@@ -191,12 +201,18 @@ export default function Projects() {
     return employees.filter((emp: any) => emp && emp.id && emp.role !== "admin");
   }, [employees]);
 
+  const isTaskFormValid =
+    Boolean(taskData.title.trim()) &&
+    (taskData.isOngoing || Boolean(taskData.completionDate));
+
   const handleOpenTaskDialog = () => {
     setTaskData({
       title: "",
       description: "",
       priority: "medium",
       assigneeIds: currentUserId ? [currentUserId] : [],
+      completionDate: format(new Date(), "yyyy-MM-dd"),
+      isOngoing: false,
     });
     setShowTaskDialog(true);
   };
@@ -295,6 +311,9 @@ export default function Projects() {
                                       {task.description}
                                     </p>
                                   )}
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Completion: {task.completionDate ? format(new Date(task.completionDate), "MMM dd, yyyy") : "Ongoing"}
+                                  </p>
                                 </div>
                                 {getPriorityBadge(task.priority)}
                               </div>
@@ -545,6 +564,32 @@ export default function Projects() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label>Completion Date</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="date"
+                      value={taskData.completionDate}
+                      onChange={(e) =>
+                        setTaskData({ ...taskData, completionDate: e.target.value })
+                      }
+                      disabled={taskData.isOngoing}
+                    />
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
+                      <Checkbox
+                        checked={taskData.isOngoing}
+                        onCheckedChange={(value) =>
+                          setTaskData({ ...taskData, isOngoing: Boolean(value) })
+                        }
+                      />
+                      Ongoing
+                    </label>
+                  </div>
+                  {!taskData.isOngoing && !taskData.completionDate && (
+                    <p className="text-xs text-red-500">Please select a completion date or mark as ongoing.</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
                   <Label>Assign Employees</Label>
                   <Select
                     onValueChange={(value) => {
@@ -610,7 +655,7 @@ export default function Projects() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createTaskMutation.isPending}>
+                <Button type="submit" disabled={createTaskMutation.isPending || !isTaskFormValid}>
                   {createTaskMutation.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />

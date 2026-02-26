@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import {
   User,
   Mail,
@@ -16,7 +17,7 @@ import {
   Loader2,
   Check,
 } from "lucide-react";
-import { format } from "date-fns";
+import { differenceInMonths, format } from "date-fns";
 import { SUPERHERO_AVATARS, getAvatarById } from "@shared/avatars";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
@@ -53,6 +54,7 @@ export default function Account() {
       toast.error(error.message || "Failed to update password");
     },
   });
+  const { data: projectStats } = trpc.projects.getStats.useQuery();
 
   if (loading) {
     return (
@@ -101,6 +103,14 @@ export default function Account() {
     { icon: CreditCard, label: "Employee ID", value: profileData.employeeId },
     { icon: Calendar, label: "Date of Joining", value: profileData.joinDate ? format(profileData.joinDate, "MMMM dd, yyyy") : "-" },
   ];
+
+  const tenureMonths = profileData.joinDate
+    ? Math.max(0, differenceInMonths(new Date(), profileData.joinDate))
+    : 0;
+  const tenureYears = Math.floor(tenureMonths / 12);
+  const tenureProgress = profileData.joinDate ? ((tenureMonths % 12) / 12) * 100 : 0;
+  const completedTasks = projectStats?.completedTasks || 0;
+  const activeProjects = projectStats?.activeProjects || 0;
 
   const displayAvatar = selectedAvatar || user.avatar || "ironman";
   const isCustomAvatar = displayAvatar.startsWith("http") || displayAvatar.startsWith("data:");
@@ -308,6 +318,34 @@ export default function Account() {
                   </div>
                 );
               })}
+            </div>
+          </Card>
+
+          {/* Career Growth */}
+          <Card className="p-6">
+            <h2 className="text-lg font-semibold mb-4">Career Growth</h2>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Tenure</span>
+                <span className="font-semibold">
+                  {tenureYears}y {tenureMonths % 12}m
+                </span>
+              </div>
+              <Progress value={tenureProgress} className="h-2" />
+              <p className="text-xs text-muted-foreground">
+                Progress to next milestone: {tenureYears + 1} year
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm pt-2">
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <div className="text-xs text-muted-foreground">Completed Tasks</div>
+                  <div className="text-lg font-semibold">{completedTasks}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <div className="text-xs text-muted-foreground">Active Projects</div>
+                  <div className="text-lg font-semibold">{activeProjects}</div>
+                </div>
+              </div>
             </div>
           </Card>
 

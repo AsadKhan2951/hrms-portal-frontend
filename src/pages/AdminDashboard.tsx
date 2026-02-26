@@ -31,6 +31,7 @@ export default function AdminDashboard() {
   const { data: formSubmissions = [] } = trpc.admin.getFormSubmissions.useQuery();
   const { data: projects = [] } = trpc.admin.getProjectsOverview.useQuery();
   const { data: ongoingTasks = [] } = trpc.admin.getOngoingTasks.useQuery();
+  const { data: taskStats } = trpc.admin.getTaskStats.useQuery();
   const { data: avgHoursData = [] } = trpc.admin.getAverageHours.useQuery({ days: 5 });
 
   const pendingLeaves = useMemo(
@@ -56,6 +57,12 @@ export default function AdminDashboard() {
     const earliest = active.sort((a: any, b: any) => new Date(a.timeIn).getTime() - new Date(b.timeIn).getTime())[0];
     return earliest?.name || "N/A";
   }, [employeeStatuses]);
+
+  const taskCompletionRate = useMemo(() => {
+    const total = taskStats?.total || 0;
+    const completed = taskStats?.completed || 0;
+    return total ? (completed / total) * 100 : 0;
+  }, [taskStats]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -148,7 +155,7 @@ export default function AdminDashboard() {
 
       <Card className="p-4 mb-4">
         <h3 className="font-semibold mb-3 text-sm">Key Metrics</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <TrendingDown className="h-3 w-3 text-green-500" />
@@ -180,6 +187,13 @@ export default function AdminDashboard() {
             <p className="text-xl font-bold">
               {totalEmployeesCount ? ((workingNowCount / totalEmployeesCount) * 100).toFixed(0) : "0"}%
             </p>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle2 className="h-3 w-3 text-green-500" />
+              <span className="text-xs text-muted-foreground">Task Completion</span>
+            </div>
+            <p className="text-xl font-bold">{taskCompletionRate.toFixed(0)}%</p>
           </div>
         </div>
       </Card>

@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Clock, Loader2, Coffee, Plus, X, Paperclip, AlertTriangle, CheckCircle2, Calendar, Timer } from "lucide-react";
@@ -57,6 +58,8 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [taskStatus, setTaskStatus] = useState<"todo" | "in_progress" | "completed" | "blocked">("completed");
+  const [taskCompletionDate, setTaskCompletionDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [taskIsOngoing, setTaskIsOngoing] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [showTaskAlert, setShowTaskAlert] = useState(false);
   const [, setLocation] = useLocation();
@@ -102,6 +105,8 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
       setTaskTitle("");
       setTaskDescription("");
       setTaskStatus("completed");
+      setTaskCompletionDate(format(new Date(), "yyyy-MM-dd"));
+      setTaskIsOngoing(false);
       toast.success("Task added successfully");
     },
     onError: (error) => {
@@ -214,6 +219,10 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
       toast.error("Please enter a task title");
       return;
     }
+    if (!taskIsOngoing && !taskCompletionDate) {
+      toast.error("Please select a completion date or mark as ongoing");
+      return;
+    }
 
     createTaskMutation.mutate({
       projectId: selectedProjectId,
@@ -221,6 +230,9 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
       description: taskDescription.trim() || undefined,
       status: taskStatus,
       timeEntryId: activeEntry?.id,
+      completionDate: taskIsOngoing
+        ? undefined
+        : new Date(`${taskCompletionDate}T00:00:00`),
     });
   };
 
@@ -510,6 +522,25 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
                             <SelectItem value="blocked">Blocked</SelectItem>
                           </SelectContent>
                         </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Completion Date</Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="date"
+                            value={taskCompletionDate}
+                            onChange={(e) => setTaskCompletionDate(e.target.value)}
+                            disabled={taskIsOngoing}
+                          />
+                          <label className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
+                            <Checkbox
+                              checked={taskIsOngoing}
+                              onCheckedChange={(value) => setTaskIsOngoing(Boolean(value))}
+                            />
+                            Ongoing
+                          </label>
+                        </div>
                       </div>
 
                       <Button

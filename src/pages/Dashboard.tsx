@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
 import { trpc } from "@/lib/trpc";
 import { TimeInOutDialog } from "@/components/TimeInOutDialog";
 import { getAvatarById } from "@shared/avatars";
@@ -37,9 +38,10 @@ import {
   BarChart3,
   List,
   Plus,
+  Timer,
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { addHours, format, startOfMonth, endOfMonth, subDays } from "date-fns";
+import { addHours, format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfDay, subDays } from "date-fns";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 import { GlobalChatWidget } from "@/components/GlobalChatWidget";
@@ -139,6 +141,12 @@ export default function Dashboard() {
   const [workSessionEnd, setWorkSessionEnd] = useState(initialWorkSession.end);
   const [workSessionType, setWorkSessionType] = useState<"remote" | "onsite">("remote");
   const [workSessionDescription, setWorkSessionDescription] = useState("");
+  const [overtimeOpen, setOvertimeOpen] = useState(false);
+  const [overtimeDate, setOvertimeDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [overtimeHours, setOvertimeHours] = useState("1");
+  const [overtimeProjectId, setOvertimeProjectId] = useState("");
+  const [overtimeTaskId, setOvertimeTaskId] = useState("");
+  const [overtimeDescription, setOvertimeDescription] = useState("");
   const currentUserId = user?.id ? String(user.id) : null;
 
   const handleLogout = async () => {
@@ -193,17 +201,33 @@ export default function Dashboard() {
   });
 
   // Get last 7 days for trends
-  const weekStart = subDays(new Date(), 7);
+  const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
   const { data: weekAttendance } = trpc.timeTracking.getAttendance.useQuery({
     startDate: weekStart,
-    endDate: new Date(),
+    endDate: weekEnd,
   });
 
   // Get project stats
   const { data: projectStats } = trpc.projects.getStats.useQuery();
   const { data: myProjects } = trpc.projects.getMyProjects.useQuery();
+  const { data: myTaskStats } = trpc.projects.getMyTaskStats.useQuery();
+  const { data: weeklyOvertime = [] } = trpc.timeTracking.getOvertimeByRange.useQuery({
+    startDate: weekStart,
+    endDate: weekEnd,
+  });
+  const { data: overtimeTasks = [] } = trpc.projects.getTasks.useQuery(
+    { projectId: overtimeProjectId },
+    { enabled: Boolean(overtimeProjectId) }
+  );
 
   const utils = trpc.useUtils();
+
+  useEffect(() => {
+    if (overtimeProjectId && overtimeTasks.length > 0 && !overtimeTaskId) {
+      setOvertimeTaskId(String(overtimeTasks[0].id));
+    }
+  }, [overtimeProjectId, overtimeTasks, overtimeTaskId]);
 
   const resetWorkSessionForm = () => {
     const now = new Date();
@@ -221,6 +245,26 @@ export default function Dashboard() {
     if (!year || !month || !day || Number.isNaN(hour) || Number.isNaN(minute)) return null;
     return new Date(year, month - 1, day, hour, minute);
   };
+
+  const resetOvertimeForm = () => {
+    setOvertimeDate(format(new Date(), "yyyy-MM-dd"));
+    setOvertimeHours("1");
+    setOvertimeProjectId("");
+    setOvertimeTaskId("");
+    setOvertimeDescription("");
+  };
+
+  const addOvertimeMutation = trpc.timeTracking.addOvertime.useMutation({
+    onSuccess: () => {
+      toast.success("Overtime added");
+      setOvertimeOpen(false);
+      resetOvertimeForm();
+      utils.timeTracking.getOvertimeByRange.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to add overtime");
+    },
+  });
 
   const addWorkSessionMutation = trpc.timeTracking.addWorkSession.useMutation({
     onSuccess: () => {
@@ -305,6 +349,71 @@ export default function Dashboard() {
   };
 
   const insights = getWeeklyInsights();
+
+  const weeklyTargetHours = 40;
+  const weeklyOvertimeHours = useMemo(() => {
+    return weeklyOvertime.reduce((sum: number, entry: any) => sum + (Number(entry.hours) || 0), 0);
+  }, [weeklyOvertime]);
+
+  const weeklyHoursSummary = useMemo(() => {
+    if (!weekAttendance || weekAttendance.length === 0) {
+      return {
+        total: 0,
+        progress: 0,
+        missingCount: 0,
+        missingPenalty: 0,
+      };
+    }
+
+    const now = currentTime;
+    const todayStart = startOfDay(now).getTime();
+    let completedHours = 0;
+    let activeTodayHours = 0;
+    let missingCount = 0;
+
+    weekAttendance.forEach((entry: any) => {
+      const timeIn = new Date(entry.timeIn);
+      const isActive = entry.status === "active" || !entry.timeOut;
+      if (isActive) {
+        const timeInDay = startOfDay(timeIn).getTime();
+        if (timeInDay < todayStart) {
+          missingCount += 1;
+        } else {
+          activeTodayHours += (now.getTime() - timeIn.getTime()) / (1000 * 60 * 60);
+        }
+        return;
+      }
+
+      const hours = entry.totalHours
+        ? Number(entry.totalHours)
+        : entry.timeOut
+          ? (new Date(entry.timeOut).getTime() - timeIn.getTime()) / (1000 * 60 * 60)
+          : 0;
+      completedHours += hours;
+    });
+
+    const missingPenalty = missingCount * 8;
+    const total = completedHours + activeTodayHours - missingPenalty;
+    const progress = weeklyTargetHours
+      ? Math.min(100, Math.max(0, (total / weeklyTargetHours) * 100))
+      : 0;
+
+    return {
+      total: Number(total.toFixed(2)),
+      progress,
+      missingCount,
+      missingPenalty,
+    };
+  }, [weekAttendance, currentTime]);
+
+  const taskCompletionRate = useMemo(() => {
+    const total = myTaskStats?.total || 0;
+    const completed = myTaskStats?.completed || 0;
+    return total ? (completed / total) * 100 : 0;
+  }, [myTaskStats]);
+
+  const minOvertimeDate = format(subDays(new Date(), 1), "yyyy-MM-dd");
+  const maxOvertimeDate = format(new Date(), "yyyy-MM-dd");
 
   const menuItems = [
     { icon: Home, label: "Flow Central", path: "/dashboard" },
@@ -523,6 +632,24 @@ export default function Dashboard() {
                 <Button
                   variant="outline"
                   size="icon"
+                  onClick={() => {
+                    if (myProjects && myProjects.length > 0) {
+                      setOvertimeProjectId(String(myProjects[0].id));
+                    }
+                    setOvertimeTaskId("");
+                    setOvertimeDate(format(new Date(), "yyyy-MM-dd"));
+                    setOvertimeHours("1");
+                    setOvertimeDescription("");
+                    setOvertimeOpen(true);
+                  }}
+                  title="Add Overtime"
+                  className="transition-all hover:scale-110 hover:shadow-lg"
+                >
+                  <Timer className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
                   asChild
                   title="Apply Leave"
                   className="transition-all hover:scale-110 hover:shadow-lg"
@@ -576,7 +703,7 @@ export default function Dashboard() {
             {/* Weekly Insights */}
             <Card className="p-6 bg-primary/5">
               <h3 className="font-semibold mb-3">Your Week at a Glance:</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">Average hours this week:</span>
                   <p className="font-semibold">{insights.avgHours.toFixed(2)} hrs</p>
@@ -601,12 +728,16 @@ export default function Dashboard() {
                   <span className="text-muted-foreground">Active projects:</span>
                   <p className="font-semibold">{projectStats?.activeProjects || 0}</p>
                 </div>
+                <div>
+                  <span className="text-muted-foreground">OT hours this week:</span>
+                  <p className="font-semibold">{weeklyOvertimeHours.toFixed(2)} hrs</p>
+                </div>
               </div>
             </Card>
           </div>
 
           {/* Stats Grid - Compact */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
             <Card className="p-6">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-blue-500/10 rounded-lg">
@@ -648,6 +779,42 @@ export default function Dashboard() {
                       {format(new Date(activeEntry.timeIn), "HH:mm")}
                     </p>
                   )}
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-purple-500/10 rounded-lg">
+                  <Timer className="h-6 w-6 text-purple-500" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-muted-foreground">Weekly Hours</p>
+                  <p className={`text-2xl font-bold ${weeklyHoursSummary.total < 0 ? "text-red-500" : ""}`}>
+                    {weeklyHoursSummary.total.toFixed(1)} / {weeklyTargetHours}
+                  </p>
+                  <Progress value={weeklyHoursSummary.progress} className="h-2 mt-2" />
+                  {weeklyHoursSummary.missingCount > 0 && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Missing clock-outs: {weeklyHoursSummary.missingCount} (-{weeklyHoursSummary.missingPenalty}h)
+                    </p>
+                  )}
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-green-500/10 rounded-lg">
+                  <CheckCircle2 className="h-6 w-6 text-green-500" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-muted-foreground">Task Completion</p>
+                  <p className="text-2xl font-bold">{taskCompletionRate.toFixed(0)}%</p>
+                  <Progress value={taskCompletionRate} className="h-2 mt-2" />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {myTaskStats?.completed || 0}/{myTaskStats?.total || 0} tasks
+                  </p>
                 </div>
               </div>
             </Card>
@@ -903,6 +1070,150 @@ export default function Dashboard() {
                   </>
                 ) : (
                   "Add Session"
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Overtime Dialog */}
+      <Dialog open={overtimeOpen} onOpenChange={setOvertimeOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Overtime</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Date *</Label>
+              <Input
+                type="date"
+                value={overtimeDate}
+                onChange={(e) => setOvertimeDate(e.target.value)}
+                min={minOvertimeDate}
+                max={maxOvertimeDate}
+              />
+              <p className="text-xs text-muted-foreground">You can add OT for today or yesterday.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Project *</Label>
+              <Select
+                value={overtimeProjectId}
+                onValueChange={(value) => {
+                  setOvertimeProjectId(value);
+                  setOvertimeTaskId("");
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {myProjects && myProjects.length > 0 ? (
+                    myProjects.map((project: any) => (
+                      <SelectItem key={project.id} value={String(project.id)}>
+                        {project.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="none" disabled>
+                      No projects available
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Task *</Label>
+              <Select
+                value={overtimeTaskId}
+                onValueChange={(value) => setOvertimeTaskId(value)}
+                disabled={!overtimeProjectId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={overtimeProjectId ? "Select task" : "Select project first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {overtimeTasks && overtimeTasks.length > 0 ? (
+                    overtimeTasks.map((task: any) => (
+                      <SelectItem key={task.id} value={String(task.id)}>
+                        {task.title}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="none" disabled>
+                      No tasks found
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Hours *</Label>
+              <Input
+                type="number"
+                min="0.25"
+                step="0.25"
+                value={overtimeHours}
+                onChange={(e) => setOvertimeHours(e.target.value)}
+                placeholder="e.g., 2"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Description (Optional)</Label>
+              <Textarea
+                value={overtimeDescription}
+                onChange={(e) => setOvertimeDescription(e.target.value)}
+                placeholder="What OT work did you complete?"
+                className="min-h-[90px]"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setOvertimeOpen(false)}
+                disabled={addOvertimeMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  const hours = Number(overtimeHours);
+                  if (!overtimeDate || !overtimeProjectId || !overtimeTaskId) {
+                    toast.error("Please select date, project, and task");
+                    return;
+                  }
+                  if (!hours || Number.isNaN(hours) || hours <= 0) {
+                    toast.error("Please enter valid OT hours");
+                    return;
+                  }
+
+                  addOvertimeMutation.mutate({
+                    workDate: new Date(`${overtimeDate}T00:00:00`),
+                    hours,
+                    projectId: overtimeProjectId,
+                    taskId: overtimeTaskId,
+                    description: overtimeDescription.trim() || undefined,
+                  });
+                }}
+                disabled={
+                  addOvertimeMutation.isPending ||
+                  !overtimeDate ||
+                  !overtimeProjectId ||
+                  !overtimeTaskId
+                }
+              >
+                {addOvertimeMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  "Add OT"
                 )}
               </Button>
             </div>
