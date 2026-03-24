@@ -9,8 +9,20 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { format } from "date-fns";
 
-export function GlobalChatWidget() {
-  const [isOpen, setIsOpen] = useState(false);
+interface GlobalChatWidgetProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
+}
+
+export function GlobalChatWidget({ open, onOpenChange, hideTrigger }: GlobalChatWidgetProps) {
+  const [isOpenInternal, setIsOpenInternal] = useState(false);
+  const isControlled = typeof open === "boolean";
+  const isOpen = isControlled ? open : isOpenInternal;
+  const setIsOpen = (next: boolean) => {
+    if (!isControlled) setIsOpenInternal(next);
+    onOpenChange?.(next);
+  };
   const [message, setMessage] = useState("");
   const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null);
   const { user } = useAuth();
@@ -62,13 +74,15 @@ export function GlobalChatWidget() {
   return (
     <>
       {/* Floating Chat Button */}
-      <Button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-premium-lg bg-[#ff2801] hover:bg-[#e62401] text-white"
-        size="icon"
-      >
-        {isOpen ? <X className="h-6 w-6" /> : <MessageSquare className="h-6 w-6" />}
-      </Button>
+      {!hideTrigger && (
+        <Button
+          onClick={() => setIsOpen(!isOpen)}
+          className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-premium-lg bg-[#ff2801] hover:bg-[#e62401] text-white"
+          size="icon"
+        >
+          {isOpen ? <X className="h-6 w-6" /> : <MessageSquare className="h-6 w-6" />}
+        </Button>
+      )}
 
       {/* Chat Window */}
       {isOpen && (
@@ -79,25 +93,35 @@ export function GlobalChatWidget() {
               <MessageSquare className="h-5 w-5" />
               {selectedUserName ? `Chat with ${selectedUserName}` : "Team Chat"}
             </h3>
-            <div className="min-w-[160px]">
-              <Select
-                value={selectedRecipient ?? "all"}
-                onValueChange={(value) =>
-                  setSelectedRecipient(value === "all" ? null : value)
-                }
+            <div className="flex items-center gap-2">
+              <div className="min-w-[160px]">
+                <Select
+                  value={selectedRecipient ?? "all"}
+                  onValueChange={(value) =>
+                    setSelectedRecipient(value === "all" ? null : value)
+                  }
+                >
+                  <SelectTrigger className="h-8 bg-white/10 text-white border-white/20">
+                    <SelectValue placeholder="Team chat" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Team Chat</SelectItem>
+                    {availableUsers.map((u: any) => (
+                      <SelectItem key={u.id} value={String(u.id)}>
+                        {u.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setIsOpen(false)}
+                className="text-white hover:bg-white/10"
               >
-                <SelectTrigger className="h-8 bg-white/10 text-white border-white/20">
-                  <SelectValue placeholder="Team chat" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Team Chat</SelectItem>
-                  {availableUsers.map((u: any) => (
-                    <SelectItem key={u.id} value={String(u.id)}>
-                      {u.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           </div>
 

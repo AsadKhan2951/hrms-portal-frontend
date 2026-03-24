@@ -27,8 +27,20 @@ import { toast } from "sonner";
 const stripHtml = (value: string) =>
   value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
-export function NotesWidget() {
-  const [isOpen, setIsOpen] = useState(false);
+interface NotesWidgetProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
+}
+
+export function NotesWidget({ open, onOpenChange, hideTrigger }: NotesWidgetProps) {
+  const [isOpenInternal, setIsOpenInternal] = useState(false);
+  const isControlled = typeof open === "boolean";
+  const isOpen = isControlled ? open : isOpenInternal;
+  const setIsOpen = (next: boolean) => {
+    if (!isControlled) setIsOpenInternal(next);
+    onOpenChange?.(next);
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
@@ -184,13 +196,15 @@ export function NotesWidget() {
 
   return (
     <>
-      <Button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-24 right-6 z-50 h-12 w-12 rounded-full shadow-premium-lg bg-[#ff8a00] hover:bg-[#ff7a00] text-white"
-        size="icon"
-      >
-        {isOpen ? <X className="h-5 w-5" /> : <StickyNote className="h-5 w-5" />}
-      </Button>
+      {!hideTrigger && (
+        <Button
+          onClick={() => setIsOpen(!isOpen)}
+          className="fixed bottom-24 right-6 z-50 h-12 w-12 rounded-full shadow-premium-lg bg-[#ff8a00] hover:bg-[#ff7a00] text-white"
+          size="icon"
+        >
+          {isOpen ? <X className="h-5 w-5" /> : <StickyNote className="h-5 w-5" />}
+        </Button>
+      )}
 
       {isOpen && (
         <Card className="fixed inset-4 z-50 overflow-hidden border border-border/60 bg-card/95 backdrop-blur sm:inset-auto sm:bottom-24 sm:right-6 sm:h-[540px] sm:w-[820px] shadow-premium-lg">
@@ -202,10 +216,19 @@ export function NotesWidget() {
                     <StickyNote className="h-5 w-5 text-[#ff8a00]" />
                     <h3 className="font-semibold text-base">Notes</h3>
                   </div>
-                  <Button size="sm" onClick={handleNewNote}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    New
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" onClick={handleNewNote}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      New
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => setIsOpen(false)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
                 <div className="relative mt-3">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

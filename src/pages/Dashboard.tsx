@@ -39,6 +39,8 @@ import {
   List,
   Plus,
   Timer,
+  StickyNote,
+  LifeBuoy,
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { addHours, format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfDay, subDays } from "date-fns";
@@ -128,6 +130,13 @@ export default function Dashboard() {
   const [calendarSidebarOpen, setCalendarSidebarOpen] = useState(false);
   const [meetingSidebarOpen, setMeetingSidebarOpen] = useState(false);
   const [attendanceView, setAttendanceView] = useState<'graph' | 'list'>('graph');
+  const [fabOpen, setFabOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackSubject, setFeedbackSubject] = useState("");
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [feedbackPriority, setFeedbackPriority] = useState<"low" | "medium" | "high">("medium");
   const initialWorkSession = useMemo(() => {
     const now = new Date();
     return {
@@ -282,6 +291,23 @@ export default function Dashboard() {
     setOvertimeDescription("");
   };
 
+  const handleSubmitFeedback = () => {
+    if (!feedbackSubject.trim()) {
+      toast.error("Please add a subject");
+      return;
+    }
+    if (!feedbackMessage.trim()) {
+      toast.error("Please add details for the ticket");
+      return;
+    }
+    submitFeedbackMutation.mutate({
+      formType: "feedback",
+      subject: feedbackSubject.trim(),
+      content: feedbackMessage.trim(),
+      priority: feedbackPriority,
+    });
+  };
+
   const addOvertimeMutation = trpc.timeTracking.addOvertime.useMutation({
     onSuccess: () => {
       toast.success("Overtime added");
@@ -302,6 +328,20 @@ export default function Dashboard() {
     },
     onError: (error) => {
       toast.error(error.message || "Failed to add work session");
+    },
+  });
+
+  const submitFeedbackMutation = trpc.forms.submit.useMutation({
+    onSuccess: () => {
+      toast.success("Support ticket submitted");
+      setFeedbackOpen(false);
+      setFeedbackSubject("");
+      setFeedbackMessage("");
+      setFeedbackPriority("medium");
+      utils.forms.getMyForms.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to submit feedback");
     },
   });
 
@@ -676,6 +716,15 @@ export default function Dashboard() {
                   className="transition-all hover:scale-110 hover:shadow-lg"
                 >
                   <Timer className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setFeedbackOpen(true)}
+                  title="Support Ticket"
+                  className="transition-all hover:scale-110 hover:shadow-lg"
+                >
+                  <LifeBuoy className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="outline"
@@ -1297,9 +1346,100 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={feedbackOpen} onOpenChange={setFeedbackOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Support Ticket / Feedback</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Subject *</Label>
+              <Input
+                placeholder="Short summary of the issue"
+                value={feedbackSubject}
+                onChange={(e) => setFeedbackSubject(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Priority</Label>
+              <Select value={feedbackPriority} onValueChange={(value) => setFeedbackPriority(value as any)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Details *</Label>
+              <Textarea
+                rows={5}
+                placeholder="Describe the problem or feedback in detail..."
+                value={feedbackMessage}
+                onChange={(e) => setFeedbackMessage(e.target.value)}
+              />
+            </div>
+            <Button
+              className="w-full"
+              onClick={handleSubmitFeedback}
+              disabled={submitFeedbackMutation.isPending}
+            >
+              {submitFeedbackMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                "Submit Ticket"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Global Chat Widget */}
-      <NotesWidget />
-      <GlobalChatWidget />
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
+        <Button
+          onClick={() => {
+            setNotesOpen(true);
+            setFabOpen(false);
+          }}
+          className={`h-12 w-12 rounded-full shadow-premium-lg bg-[#ff8a00] hover:bg-[#ff7a00] text-white transition-all ${
+            fabOpen ? "opacity-100 translate-x-0" : "opacity-0 translate-x-6 pointer-events-none"
+          }`}
+          size="icon"
+          title="Notes"
+        >
+          <StickyNote className="h-5 w-5" />
+        </Button>
+        <Button
+          onClick={() => {
+            setChatOpen(true);
+            setFabOpen(false);
+          }}
+          className={`h-12 w-12 rounded-full shadow-premium-lg bg-[#ff2801] hover:bg-[#e62401] text-white transition-all ${
+            fabOpen ? "opacity-100 translate-x-0" : "opacity-0 translate-x-6 pointer-events-none"
+          }`}
+          size="icon"
+          title="Chat"
+        >
+          <MessageSquare className="h-5 w-5" />
+        </Button>
+        <Button
+          onClick={() => setFabOpen(!fabOpen)}
+          className="h-14 w-14 rounded-full shadow-premium-lg bg-primary hover:bg-primary/90 text-white"
+          size="icon"
+          title="Quick Actions"
+        >
+          {fabOpen ? <X className="h-6 w-6" /> : <Plus className="h-6 w-6" />}
+        </Button>
+      </div>
+
+      <NotesWidget open={notesOpen} onOpenChange={setNotesOpen} hideTrigger />
+      <GlobalChatWidget open={chatOpen} onOpenChange={setChatOpen} hideTrigger />
 
       {/* Notification Sidebar */}
       <NotificationSidebar 
