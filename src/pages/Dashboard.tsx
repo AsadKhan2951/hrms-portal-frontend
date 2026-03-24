@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useIsMobile } from "@/hooks/useMobile";
@@ -177,6 +177,8 @@ export default function Dashboard() {
   }, []);
 
   const { data: activeEntry } = trpc.timeTracking.getActive.useQuery();
+  const updateLocationMutation = trpc.timeTracking.updateLocation.useMutation();
+  const locationRequestedForEntry = useRef<string | null>(null);
   const { data: breakLogs } = trpc.timeTracking.getBreakLogs.useQuery();
   const { data: chatMessages } = trpc.chat.getMessages.useQuery(
     { limit: 100 },
@@ -229,6 +231,31 @@ export default function Dashboard() {
       setOvertimeTaskId(String(overtimeTasks[0].id));
     }
   }, [overtimeProjectId, overtimeTasks, overtimeTaskId]);
+
+  useEffect(() => {
+    if (!activeEntry || (activeEntry as any).location) return;
+    if (!navigator.geolocation) return;
+    const entryId = String((activeEntry as any).id || "");
+    if (!entryId || locationRequestedForEntry.current === entryId) return;
+
+    locationRequestedForEntry.current = entryId;
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        updateLocationMutation.mutate({
+          location: {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            source: "gps",
+          },
+        });
+      },
+      () => {
+        // Ignore errors silently; location will stay unavailable.
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+  }, [activeEntry, updateLocationMutation]);
 
   const resetWorkSessionForm = () => {
     const now = new Date();

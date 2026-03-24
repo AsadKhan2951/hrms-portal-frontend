@@ -62,6 +62,7 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
   const [taskIsOngoing, setTaskIsOngoing] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [showTaskAlert, setShowTaskAlert] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [, setLocation] = useLocation();
 
   const utils = trpc.useUtils();
@@ -163,7 +164,31 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
   }, [activeEntry, currentTime]);
 
   const handleClockIn = () => {
-    clockInMutation.mutate();
+    if (!navigator.geolocation) {
+      clockInMutation.mutate();
+      return;
+    }
+
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocating(false);
+        clockInMutation.mutate({
+          location: {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            source: "gps",
+          },
+        });
+      },
+      (error) => {
+        setLocating(false);
+        toast.error(error.message || "Unable to fetch location. Clocking in without location.");
+        clockInMutation.mutate();
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
   };
 
   const handleClockOut = () => {
@@ -666,11 +691,11 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
                 )}
               </Button>
             ) : (
-              <Button onClick={handleClockIn} disabled={clockInMutation.isPending}>
-                {clockInMutation.isPending ? (
+              <Button onClick={handleClockIn} disabled={clockInMutation.isPending || locating}>
+                {clockInMutation.isPending || locating ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Clocking In...
+                    {locating ? "Fetching Location..." : "Clocking In..."}
                   </>
                 ) : (
                   "Clock In"
