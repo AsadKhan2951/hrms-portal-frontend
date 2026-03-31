@@ -28,7 +28,7 @@ export default function Login() {
   };
 
   const loginMutation = trpc.auth.customLogin.useMutation({
-    onSuccess: (data: any) => {
+    onSuccess: async (data: any) => {
       if (data?.requiresTwoFactor) {
         setTwoFactorRequired(true);
         setTwoFactorToken(data.twoFactorToken);
