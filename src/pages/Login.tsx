@@ -97,11 +97,11 @@ export default function Login() {
           {!twoFactorRequired ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="employeeId">Employee ID</Label>
+                <Label htmlFor="employeeId">Employee Name</Label>
                 <Input
                   id="employeeId"
                   type="text"
-                  placeholder="EMP001"
+                  placeholder="Talha Aziz"
                   value={employeeId}
                   onChange={(e) => setEmployeeId(e.target.value)}
                   required
