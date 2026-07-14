@@ -91,7 +91,9 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
   const filteredMenuItems = menuItems.filter(item =>
     item.label.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  const logoSrc = theme === "dark" ? "/radflow-logo-white.png" : "/radflow-logo.png";
+  const logoClassName = theme === "dark"
+    ? "h-8 w-auto object-contain"
+    : "h-8 w-auto object-contain invert";
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -121,9 +123,9 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
         <div className="p-4 border-b flex items-center justify-between">
           {!sidebarCollapsed && (
             <img
-              src={logoSrc}
-              alt="Rad.flow"
-              className="h-8"
+              src="/new-logo-v2.png"
+              alt="Now HRMS"
+              className={logoClassName}
               style={{ width: "115px", height: "61px" }}
             />
           )}
@@ -223,9 +225,9 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
             {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
           <img
-            src={logoSrc}
-            alt="Rad.flow"
-            className="h-8"
+            src="/new-logo-v2.png"
+            alt="Now HRMS"
+            className={logoClassName}
             style={{ width: "115px", height: "61px" }}
           />
           <Button

@@ -11,6 +11,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 
 export default function Login() {
   const { theme } = useTheme();
+  const logoClassName = theme === "dark" ? "h-16 w-auto object-contain" : "h-16 w-auto object-contain invert";
   const [employeeId, setEmployeeId] = useState("");
   const [password, setPassword] = useState("");
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
@@ -84,9 +85,9 @@ export default function Login() {
         <CardHeader className="space-y-1">
           <div className="flex justify-center mb-4">
             <img
-              src={theme === "dark" ? "/radflow-logo-white.png" : "/radflow-logo.png"}
-              alt="Rad.flow"
-              className="h-16"
+              src="/new-logo-v2.png"
+              alt="Now HRMS"
+              className={logoClassName}
             />
           </div>
           <CardDescription className="text-center">

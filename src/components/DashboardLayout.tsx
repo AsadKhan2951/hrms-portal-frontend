@@ -131,7 +131,9 @@ function DashboardLayoutContent({
   ];
 
   const activeMenuItem = menuItems.find(item => item.path === location);
-  const logoSrc = theme === "dark" ? "/radflow-logo-white.png" : "/radflow-logo.png";
+  const logoClassName = theme === "dark"
+    ? "h-8 w-auto object-contain"
+    : "h-8 w-auto object-contain invert";
 
   useEffect(() => {
     if (isCollapsed) {
@@ -198,9 +200,9 @@ function DashboardLayoutContent({
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
                   <img
-                    src={logoSrc}
-                    alt="Rad.flow"
-                    className="h-8 w-auto object-contain"
+                    src="/new-logo-v2.png"
+                    alt="Now HRMS"
+                    className={logoClassName}
                     style={{ width: "115px", height: "61px" }}
                   />
                 </div>

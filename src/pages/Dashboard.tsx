@@ -502,7 +502,9 @@ export default function Dashboard() {
     item.label.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const logoSrc = theme === "dark" ? "/radflow-logo-white.png" : "/radflow-logo.png";
+  const logoClassName = theme === "dark"
+    ? "h-8 w-auto object-contain"
+    : "h-8 w-auto object-contain invert";
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -531,7 +533,12 @@ export default function Dashboard() {
         {/* Logo & Toggle */}
         <div className="p-4 border-b flex items-center justify-between">
           {!sidebarCollapsed && (
-            <img src={logoSrc} alt="Rad.flow" className="h-8" style={{width: '115px', height: '61px'}} />
+            <img
+              src="/new-logo-v2.png"
+              alt="Now HRMS"
+              className={logoClassName}
+              style={{ width: "115px", height: "61px" }}
+            />
           )}
           <Button
             variant="ghost"
@@ -615,7 +622,12 @@ export default function Dashboard() {
           >
             {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
-          <img src={logoSrc} alt="Rad.flow" className="h-8" />
+          <img
+            src="/new-logo-v2.png"
+            alt="Now HRMS"
+            className={logoClassName}
+            style={{ width: "115px", height: "61px" }}
+          />
           <div className="flex items-center gap-1">
             <Link href="/notifications">
               <Button
