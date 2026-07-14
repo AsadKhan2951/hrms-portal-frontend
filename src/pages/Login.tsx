@@ -11,7 +11,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 
 export default function Login() {
   const { theme } = useTheme();
-  const logoClassName = theme === "dark" ? "h-16 w-auto object-contain" : "h-16 w-auto object-contain invert";
+  const logoClassName = theme === "dark" ? "h-10 w-auto object-contain" : "h-10 w-auto object-contain invert";
   const [employeeId, setEmployeeId] = useState("");
   const [password, setPassword] = useState("");
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
