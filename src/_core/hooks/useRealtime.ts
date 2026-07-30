@@ -23,14 +23,21 @@ export function useRealtime() {
       utils.admin.getAnnouncements.invalidate();
     };
 
+    const handlePayslips = () => {
+      utils.dashboard.getPayslips.invalidate();
+      utils.dashboard.getPayslip.invalidate();
+    };
+
     socket.on("chat:new", handleChat);
     socket.on("notifications:new", handleNotifications);
     socket.on("announcements:new", handleAnnouncements);
+    socket.on("payslips:new", handlePayslips);
 
     return () => {
       socket.off("chat:new", handleChat);
       socket.off("notifications:new", handleNotifications);
       socket.off("announcements:new", handleAnnouncements);
+      socket.off("payslips:new", handlePayslips);
     };
   }, [utils]);
 }

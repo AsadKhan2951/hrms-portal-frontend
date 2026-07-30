@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -27,61 +28,146 @@ import {
   User,
   FileText,
   Download,
+  Loader2,
 } from "lucide-react";
 import { Redirect } from "wouter";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { trpc } from "@/lib/trpc";
+import { apiUrl, fileUrl } from "@/lib/api";
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 export default function PayslipManagement() {
   const { user } = useAuth();
+  const utils = trpc.useUtils();
+  const now = new Date();
+
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [bulkUploadDialogOpen, setBulkUploadDialogOpen] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(String(now.getMonth() + 1));
+  const [selectedYear, setSelectedYear] = useState(String(now.getFullYear()));
   const [selectedEmployee, setSelectedEmployee] = useState("");
-  const [amount, setAmount] = useState("");
+  const [basicSalary, setBasicSalary] = useState("");
+  const [allowances, setAllowances] = useState("");
+  const [deductions, setDeductions] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [markPaid, setMarkPaid] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   const { data: employeeData = [], isLoading: employeesLoading } = trpc.employees.list.useQuery();
   const employees = employeeData.filter((emp: any) => emp?.role === "user");
   const { data: payslips = [], isLoading: payslipsLoading } = trpc.admin.getPayslips.useQuery();
 
+  const createPayslipMutation = trpc.admin.createPayslip.useMutation();
+
   if (user && user.role !== "admin") {
     return <Redirect to="/dashboard" />;
   }
 
-  const handleUploadPayslip = () => {
-    if (!selectedEmployee || !selectedMonth || !amount || !file) {
-      toast.error("Please fill all fields and select a file");
-      return;
-    }
-    toast.success("Payslip uploaded successfully");
-    setUploadDialogOpen(false);
-    resetForm();
+  const toNumber = (value: string) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
   };
 
-  const handleBulkUpload = () => {
-    if (!selectedMonth || !file) {
-      toast.error("Please select month and upload a file");
+  // Mirrors the server-side calculation in backend/payroll.ts. The server value
+  // is authoritative; this is only a preview for the admin.
+  const netSalaryPreview =
+    toNumber(basicSalary) + toNumber(allowances) - toNumber(deductions);
+
+  const uploadPayslipFile = async (pdf: File) => {
+    const formData = new FormData();
+    formData.append("file", pdf);
+    formData.append("docType", "payslip");
+
+    const response = await fetch(apiUrl("/api/upload-employee-document"), {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.error || "Failed to upload payslip file");
+    }
+
+    const payload = await response.json();
+    return payload.url as string;
+  };
+
+  const handleUploadPayslip = async () => {
+    if (!selectedEmployee) {
+      toast.error("Please select an employee");
       return;
     }
-    toast.success("Bulk payslips uploaded successfully");
-    setBulkUploadDialogOpen(false);
-    resetForm();
+    if (!basicSalary.trim()) {
+      toast.error("Please enter the basic salary");
+      return;
+    }
+    if (toNumber(basicSalary) <= 0) {
+      toast.error("Basic salary must be greater than zero");
+      return;
+    }
+    if (netSalaryPreview < 0) {
+      toast.error("Deductions cannot exceed basic salary plus allowances");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // The PDF is optional â€” the payslip figures are what the employee's
+      // portal renders, so a missing file must not block issuing it.
+      const documentUrl = file ? await uploadPayslipFile(file) : undefined;
+
+      const result = await createPayslipMutation.mutateAsync({
+        userId: selectedEmployee,
+        month: Number(selectedMonth),
+        year: Number(selectedYear),
+        basicSalary: toNumber(basicSalary),
+        allowances: toNumber(allowances),
+        deductions: toNumber(deductions),
+        documentUrl,
+        markPaid,
+      });
+
+      await utils.admin.getPayslips.invalidate();
+
+      const employeeName =
+        employees.find((emp: any) => emp.id === selectedEmployee)?.name || "employee";
+
+      toast.success(
+        result.wasReplaced
+          ? `Payslip updated for ${employeeName}. They have been notified.`
+          : `Payslip issued to ${employeeName}. They have been notified.`
+      );
+
+      setUploadDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save payslip");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const resetForm = () => {
     setSelectedEmployee("");
-    setSelectedMonth("");
-    setAmount("");
+    setSelectedMonth(String(now.getMonth() + 1));
+    setSelectedYear(String(now.getFullYear()));
+    setBasicSalary("");
+    setAllowances("");
+    setDeductions("");
     setFile(null);
+    setMarkPaid(true);
   };
 
-  const months = [
-    "January 2026", "February 2026", "March 2026", "April 2026",
-    "May 2026", "June 2026", "July 2026", "August 2026",
-    "September 2026", "October 2026", "November 2026", "December 2026",
-  ];
+  const years = useMemo(() => {
+    const current = now.getFullYear();
+    return [current + 1, current, current - 1, current - 2].map(String);
+  }, [now]);
 
   const latestMonth = useMemo(() => {
     if (!payslips.length) return "-";
@@ -171,20 +257,33 @@ export default function PayslipManagement() {
                       <div>
                         <p className="font-semibold">{payslip.user?.name || "Employee"}</p>
                         <p className="text-sm text-muted-foreground">
-                          {payslip.user?.employeeId || "--"} • {payslip.month && payslip.year ? format(new Date(payslip.year, payslip.month - 1, 1), "MMMM yyyy") : "--"}
+                          {payslip.user?.employeeId || "--"} &bull; {payslip.month && payslip.year ? format(new Date(payslip.year, payslip.month - 1, 1), "MMMM yyyy") : "--"}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-right">
-                        <p className="font-semibold">${Number(payslip.netSalary || payslip.amount || 0).toLocaleString()}</p>
+                        <p className="font-semibold">PKR {Number(payslip.netSalary || 0).toLocaleString()}</p>
                         <p className="text-xs text-muted-foreground">
                           {payslip.createdAt ? format(new Date(payslip.createdAt), "MMM dd, yyyy") : "--"}
                         </p>
                       </div>
-                      <Button variant="outline" size="sm">
-                        <Download className="h-4 w-4" />
-                      </Button>
+                      {fileUrl(payslip.documentUrl) ? (
+                        <Button variant="outline" size="sm" asChild>
+                          <a
+                            href={fileUrl(payslip.documentUrl) as string}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label="Download payslip PDF"
+                          >
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      ) : (
+                        <Button variant="outline" size="sm" disabled title="No file attached">
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))
@@ -220,7 +319,7 @@ export default function PayslipManagement() {
                       </SelectItem>
                     ) : (
                       employees.map((emp: any) => (
-                        <SelectItem key={emp.id} value={emp.employeeId || emp.id}>
+                        <SelectItem key={emp.id} value={emp.id}>
                           {emp.name} ({emp.employeeId || "N/A"})
                         </SelectItem>
                       ))
@@ -229,50 +328,131 @@ export default function PayslipManagement() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="month">Month *</Label>
-                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select month" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {months.map((month) => (
-                      <SelectItem key={month} value={month}>
-                        {month}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="month">Month *</Label>
+                  <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                    <SelectTrigger id="month">
+                      <SelectValue placeholder="Select month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTHS.map((month, index) => (
+                        <SelectItem key={month} value={String(index + 1)}>
+                          {month}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="year">Year *</Label>
+                  <Select value={selectedYear} onValueChange={setSelectedYear}>
+                    <SelectTrigger id="year">
+                      <SelectValue placeholder="Select year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {years.map((year) => (
+                        <SelectItem key={year} value={year}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="amount">Amount *</Label>
+                <Label htmlFor="basicSalary">Basic Salary (PKR) *</Label>
                 <Input
-                  id="amount"
+                  id="basicSalary"
                   type="number"
-                  placeholder="5000"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  min="0"
+                  placeholder="80000"
+                  value={basicSalary}
+                  onChange={(e) => setBasicSalary(e.target.value)}
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="allowances">Allowances (PKR)</Label>
+                  <Input
+                    id="allowances"
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={allowances}
+                    onChange={(e) => setAllowances(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="deductions">Deductions (PKR)</Label>
+                  <Input
+                    id="deductions"
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={deductions}
+                    onChange={(e) => setDeductions(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg bg-muted px-4 py-3">
+                <span className="text-sm text-muted-foreground">Net Salary</span>
+                <span className="text-lg font-bold">
+                  PKR {netSalaryPreview.toLocaleString()}
+                </span>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="file">Payslip File (PDF) *</Label>
+                <Label htmlFor="file">Payslip File (PDF)</Label>
                 <Input
                   id="file"
                   type="file"
                   accept=".pdf"
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Optional. The employee sees the salary breakdown either way.
+                </p>
               </div>
+
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="markPaid"
+                  checked={markPaid}
+                  onCheckedChange={(checked) => setMarkPaid(checked === true)}
+                />
+                <Label htmlFor="markPaid" className="font-normal">
+                  Mark as paid
+                </Label>
+              </div>
+              <p className="-mt-2 text-xs text-muted-foreground">
+                Unchecked payslips show as &quot;pending&quot; on the employee&apos;s
+                portal.
+              </p>
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setUploadDialogOpen(false)}
+                disabled={isSaving}
+              >
                 Cancel
               </Button>
-              <Button onClick={handleUploadPayslip}>
-                Upload Payslip
+              <Button onClick={handleUploadPayslip} disabled={isSaving}>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Issue Payslip"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -283,47 +463,26 @@ export default function PayslipManagement() {
             <DialogHeader>
               <DialogTitle>Bulk Upload Payslips</DialogTitle>
               <DialogDescription>
-                Upload multiple payslips at once using a ZIP file
+                Not available yet
               </DialogDescription>
             </DialogHeader>
 
-            <div className="grid gap-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="bulk-month">Month *</Label>
-                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select month" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {months.map((month) => (
-                      <SelectItem key={month} value={month}>
-                        {month}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="bulk-file">ZIP File *</Label>
-                <Input
-                  id="bulk-file"
-                  type="file"
-                  accept=".zip"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Upload a ZIP file containing PDF payslips named with employee IDs (e.g., EMP001.pdf)
-                </p>
-              </div>
+            <div className="py-4 text-sm text-muted-foreground space-y-2">
+              <p>
+                Bulk upload needs server-side ZIP extraction, which is not
+                implemented yet. Nothing was being saved before, so the button
+                has been left here as a placeholder rather than silently
+                reporting success.
+              </p>
+              <p>
+                For now, issue payslips one employee at a time with{" "}
+                <span className="font-medium text-foreground">Upload Payslip</span>.
+              </p>
             </div>
 
             <DialogFooter>
               <Button variant="outline" onClick={() => setBulkUploadDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleBulkUpload}>
-                Upload Payslips
+                Close
               </Button>
             </DialogFooter>
           </DialogContent>

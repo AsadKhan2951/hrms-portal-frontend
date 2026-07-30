@@ -12,7 +12,8 @@ import {
   CheckCircle2,
   Calendar,
   Loader2,
-  Trash2
+  Trash2,
+  DollarSign
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -103,6 +104,8 @@ export default function Notifications() {
         return <Clock className="h-5 w-5 text-red-500" />;
       case "announcement":
         return <Bell className="h-5 w-5 text-purple-500" />;
+      case "payslip_issued":
+        return <DollarSign className="h-5 w-5 text-emerald-500" />;
       default:
         return <Bell className="h-5 w-5 text-gray-500" />;
     }
@@ -130,6 +133,7 @@ export default function Notifications() {
       attendance_issue: "Attendance",
       hours_shortfall: "Hours Alert",
       announcement: "Announcement",
+      payslip_issued: "Payslip",
       system_alert: "System",
     };
     return labels[type] || type;

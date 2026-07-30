@@ -6,15 +6,11 @@ import { Download, FileText, DollarSign, TrendingUp } from "lucide-react";
 import { format } from "date-fns";
 import { trpc } from "@/lib/trpc";
 import { useMemo } from "react";
+import { fileUrl } from "@/lib/api";
 
 export default function Payslips() {
   const { data: payslips = [], isLoading } = trpc.dashboard.getPayslips.useQuery();
   const latestPayslip = useMemo(() => payslips[0], [payslips]);
-
-  const handleDownload = (payslipId: number) => {
-    // Placeholder for download functionality
-    console.log(`Downloading payslip ${payslipId}`);
-  };
 
   return (
     <LayoutWrapper>
@@ -131,14 +127,28 @@ export default function Payslips() {
                         {payslip.paidAt ? "paid" : "pending"}
                       </Badge>
 
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDownload(Number(payslip.id))}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
-                      </Button>
+                      {fileUrl(payslip.documentUrl) ? (
+                        <Button variant="outline" size="sm" asChild>
+                          <a
+                            href={fileUrl(payslip.documentUrl) as string}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Download
+                          </a>
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled
+                          title="No PDF attached to this payslip"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Download
+                        </Button>
+                      )}
                     </div>
                   </div>
 
