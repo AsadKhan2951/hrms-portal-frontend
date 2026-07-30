@@ -11,7 +11,8 @@ import {
   AlertTriangle, 
   Calendar,
   MessageSquare,
-  ArrowRight
+  ArrowRight,
+  DollarSign
 } from "lucide-react";
 import { format } from "date-fns";
 import { trpc } from "@/lib/trpc";
@@ -112,6 +113,8 @@ export function NotificationSidebar({ isOpen, onClose }: NotificationSidebarProp
         return <Clock className="h-4 w-4 text-red-500" />;
       case "announcement":
         return <Bell className="h-4 w-4 text-purple-500" />;
+      case "payslip_issued":
+        return <DollarSign className="h-4 w-4 text-emerald-500" />;
       case "chat":
         return <MessageSquare className="h-4 w-4 text-green-500" />;
       default:
