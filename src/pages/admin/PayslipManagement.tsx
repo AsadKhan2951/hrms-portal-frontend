@@ -29,7 +29,9 @@ import {
   FileText,
   Download,
   Loader2,
+  Check,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Redirect } from "wouter";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -63,6 +65,29 @@ export default function PayslipManagement() {
   const { data: payslips = [], isLoading: payslipsLoading } = trpc.admin.getPayslips.useQuery();
 
   const createPayslipMutation = trpc.admin.createPayslip.useMutation();
+  const setPaidMutation = trpc.admin.setPayslipPaid.useMutation();
+  const [pendingPaidId, setPendingPaidId] = useState<string | null>(null);
+
+  const togglePaid = async (payslip: any) => {
+    const nowPaid = !payslip.paidAt;
+    setPendingPaidId(payslip.id);
+    try {
+      await setPaidMutation.mutateAsync({ payslipId: payslip.id, paid: nowPaid });
+      await utils.admin.getPayslips.invalidate();
+      const who = payslip.user?.name || "employee";
+      toast.success(
+        nowPaid
+          ? `Marked as paid. ${who} has been notified.`
+          : `Marked as pending again for ${who}.`
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update payment status"
+      );
+    } finally {
+      setPendingPaidId(null);
+    }
+  };
 
   if (user && user.role !== "admin") {
     return <Redirect to="/dashboard" />;
@@ -268,6 +293,35 @@ export default function PayslipManagement() {
                           {payslip.createdAt ? format(new Date(payslip.createdAt), "MMM dd, yyyy") : "--"}
                         </p>
                       </div>
+
+                      {payslip.paidAt ? (
+                        <Badge className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/10">
+                          Paid {format(new Date(payslip.paidAt), "MMM dd")}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-amber-500 border-amber-500/40">
+                          Pending
+                        </Badge>
+                      )}
+
+                      <Button
+                        variant={payslip.paidAt ? "ghost" : "default"}
+                        size="sm"
+                        disabled={pendingPaidId === payslip.id}
+                        onClick={() => togglePaid(payslip)}
+                      >
+                        {pendingPaidId === payslip.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : payslip.paidAt ? (
+                          "Mark unpaid"
+                        ) : (
+                          <>
+                            <Check className="h-4 w-4 mr-2" />
+                            Mark as paid
+                          </>
+                        )}
+                      </Button>
+
                       {fileUrl(payslip.documentUrl) ? (
                         <Button variant="outline" size="sm" asChild>
                           <a
