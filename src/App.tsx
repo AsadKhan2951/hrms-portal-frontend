@@ -26,6 +26,8 @@ import AdvancedReports from "./pages/admin/AdvancedReports";
 import AnnouncementsManagement from "./pages/admin/AnnouncementsManagement";
 import Calendar from "./pages/Calendar";
 import ScheduleMeeting from "./pages/ScheduleMeeting";
+import FlowProjectBoard from "./pages/FlowProjectBoard";
+import FpbProjectDetail from "./pages/fpb/ProjectDetail";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
@@ -84,6 +86,14 @@ function Router() {
       <Route path="/notifications" component={() => <ProtectedRoute component={Notifications} />} />
           <Route path="/calendar" component={() => <ProtectedRoute component={Calendar} />} />
           <Route path="/schedule-meeting" component={() => <ProtectedRoute component={ScheduleMeeting} />} />
+      {/* Flow Project Board (Kanban). Full-bleed, so it sits outside the
+          dashboard shell and renders its own header. */}
+      <Route path="/board">
+        {() => <ProtectedRoute component={FlowProjectBoard} />}
+      </Route>
+      <Route path="/board/project/:id">
+        {() => <ProtectedRoute component={FpbProjectDetail} />}
+      </Route>
       <Route path="/admin">
         {() => <ProtectedRoute component={AdminDashboard} />}
       </Route>
