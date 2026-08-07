@@ -106,6 +106,8 @@ export default function Notifications() {
         return <Bell className="h-5 w-5 text-purple-500" />;
       case "payslip_issued":
         return <DollarSign className="h-5 w-5 text-emerald-500" />;
+      case "task_assigned":
+        return <FolderKanban className="h-5 w-5 text-violet-500" />;
       default:
         return <Bell className="h-5 w-5 text-gray-500" />;
     }
@@ -134,6 +136,7 @@ export default function Notifications() {
       hours_shortfall: "Hours Alert",
       announcement: "Announcement",
       payslip_issued: "Payslip",
+      task_assigned: "Task",
       system_alert: "System",
     };
     return labels[type] || type;

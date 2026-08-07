@@ -15,6 +15,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
@@ -263,114 +266,184 @@ function TaskRow({
   );
 }
 
-// ───────────────────────────────────────────────────────────── New task form
-function NewTaskForm({
-  projectId, members, users, tokens,
-}: { projectId: string; members: string[]; users: any[]; tokens: any }) {
+// ──────────────────────────────────────────────────────────── New task modal
+function NewTaskModal({
+  open, onClose, projectId, projectTitle, members, users, tokens,
+}: {
+  open: boolean; onClose: () => void; projectId: string; projectTitle: string;
+  members: string[]; users: any[]; tokens: any;
+}) {
   const utils = trpc.useUtils();
-  const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
+  const [status, setStatus] = useState<string>("todo");
   const [dueDate, setDueDate] = useState("");
   const [assignedTo, setAssignedTo] = useState<string>("");
 
+  const reset = () => {
+    setTitle(""); setDescription(""); setPriority("medium");
+    setStatus("todo"); setDueDate(""); setAssignedTo("");
+  };
+
   const create = trpc.fpb.createTask.useMutation({
-    onSuccess: () => {
+    onSuccess: async (task: any) => {
+      // A status other than the default needs a follow-up write; createTask
+      // always starts a task at "todo".
+      if (status !== "todo" && task?.id) {
+        await utils.client.fpb.updateTask.mutate({ id: task.id, status: status as any });
+      }
       utils.fpb.getTasks.invalidate({ projectId });
       utils.fpb.getProjects.invalidate();
-      toast.success("Task added");
-      setTitle(""); setDescription(""); setPriority("medium");
-      setDueDate(""); setAssignedTo(""); setOpen(false);
+      toast.success(
+        assignedTo && assignedTo !== "none"
+          ? `Task created and assigned. ${users.find(u => u.id === assignedTo)?.name ?? "They"} has been notified.`
+          : "Task created"
+      );
+      reset();
+      onClose();
     },
     onError: (e: any) => toast.error(e?.message || "Could not add task"),
   });
 
-  // Only people on the project can be assigned work on it.
+  // Only people on the project can be assigned its work; this mirrors the API.
   const assignable = users.filter(u => members.includes(u.id));
 
-  if (!open) {
-    return (
-      <Button
-        onClick={() => setOpen(true)}
-        variant="outline"
-        size="sm"
-        className={`w-full ${tokens.btnOutline}`}
-      >
-        <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Task
-      </Button>
-    );
-  }
+  const submit = () => {
+    if (!title.trim()) return;
+    create.mutate({
+      projectId,
+      title: title.trim(),
+      description: description.trim() || undefined,
+      priority,
+      dueDate: dueDate ? new Date(`${dueDate}T12:00:00`) : undefined,
+      assignedTo: assignedTo && assignedTo !== "none" ? assignedTo : undefined,
+      memberIds: assignedTo && assignedTo !== "none" ? [assignedTo] : undefined,
+    });
+  };
 
   return (
-    <div className={`${tokens.surface} border ${tokens.border} rounded-lg p-3 space-y-2.5`}>
-      <Input
-        autoFocus
-        value={title}
-        onChange={e => setTitle(e.target.value)}
-        placeholder="Task title..."
-        className={tokens.input}
-      />
-      <Textarea
-        value={description}
-        onChange={e => setDescription(e.target.value)}
-        placeholder="Description (optional)"
-        rows={2}
-        className={`${tokens.input} resize-none`}
-      />
-      <div className="grid grid-cols-3 gap-2">
-        <Select value={priority} onValueChange={v => setPriority(v as Priority)}>
-          <SelectTrigger className={`h-8 text-xs ${tokens.select}`}><SelectValue /></SelectTrigger>
-          <SelectContent className={tokens.selectContent}>
-            {(["low", "medium", "high", "urgent"] as Priority[]).map(p => (
-              <SelectItem key={p} value={p} className="capitalize text-xs">{p}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={assignedTo} onValueChange={setAssignedTo}>
-          <SelectTrigger className={`h-8 text-xs ${tokens.select}`}>
-            <SelectValue placeholder="Assign to" />
-          </SelectTrigger>
-          <SelectContent className={tokens.selectContent}>
-            {assignable.length === 0 && (
-              <SelectItem value="none" disabled className="text-xs">Add members first</SelectItem>
-            )}
-            {assignable.map(u => (
-              <SelectItem key={u.id} value={u.id} className="text-xs">{u.name || u.employeeId}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Input
-          type="date"
-          value={dueDate}
-          onChange={e => setDueDate(e.target.value)}
-          className={`h-8 text-xs ${tokens.input}`}
-        />
-      </div>
-      <div className="flex justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={() => setOpen(false)} className={tokens.btnGhost}>
-          Cancel
-        </Button>
-        <Button
-          size="sm"
-          disabled={!title.trim() || create.isPending}
-          onClick={() =>
-            create.mutate({
-              projectId,
-              title: title.trim(),
-              description: description.trim() || undefined,
-              priority,
-              dueDate: dueDate ? new Date(`${dueDate}T12:00:00`) : undefined,
-              assignedTo: assignedTo && assignedTo !== "none" ? assignedTo : undefined,
-              memberIds: assignedTo && assignedTo !== "none" ? [assignedTo] : undefined,
-            })
-          }
-          className="bg-violet-600 hover:bg-violet-700 text-white"
-        >
-          {create.isPending ? "Adding..." : "Add Task"}
-        </Button>
-      </div>
-    </div>
+    <Dialog open={open} onOpenChange={o => { if (!o) { reset(); onClose(); } }}>
+      <DialogContent className={`${tokens.dialog} max-w-lg max-h-[90vh] overflow-y-auto`}>
+        <DialogHeader>
+          <DialogTitle className="font-semibold">Create Task</DialogTitle>
+          <DialogDescription className={tokens.textMuted}>
+            in {projectTitle}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 mt-2">
+          <div>
+            <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Task Title *</label>
+            <Input
+              autoFocus
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="What needs doing?"
+              className={tokens.input}
+              onKeyDown={e => {
+                // Enter submits from the title field, as most trackers do.
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+              }}
+            />
+          </div>
+
+          <div>
+            <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Description</label>
+            <Textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Any detail worth capturing..."
+              rows={3}
+              className={`${tokens.input} resize-none`}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Assignee</label>
+              <Select value={assignedTo} onValueChange={setAssignedTo}>
+                <SelectTrigger className={tokens.select}>
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent className={tokens.selectContent}>
+                  {assignable.length === 0 ? (
+                    <SelectItem value="none" disabled>Add team members first</SelectItem>
+                  ) : (
+                    assignable.map(u => (
+                      <SelectItem key={u.id} value={u.id}>
+                        <span className="flex items-center gap-2">
+                          <Avatar user={u} size={18} /> {u.name || u.employeeId}
+                        </span>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Status</label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className={tokens.select}><SelectValue /></SelectTrigger>
+                <SelectContent className={tokens.selectContent}>
+                  {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Priority</label>
+              <Select value={priority} onValueChange={v => setPriority(v as Priority)}>
+                <SelectTrigger className={tokens.select}><SelectValue /></SelectTrigger>
+                <SelectContent className={tokens.selectContent}>
+                  {(["low", "medium", "high", "urgent"] as Priority[]).map(p => (
+                    <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Due Date</label>
+              <Input
+                type="date"
+                value={dueDate}
+                onChange={e => setDueDate(e.target.value)}
+                className={tokens.input}
+              />
+            </div>
+          </div>
+
+          {assignable.length === 0 && (
+            <p className="text-xs text-amber-500">
+              Nobody is on this project yet. Add people on the Team tab before assigning work.
+            </p>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="ghost"
+              onClick={() => { reset(); onClose(); }}
+              className={tokens.btnGhost}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={submit}
+              disabled={!title.trim() || create.isPending}
+              className="bg-violet-600 hover:bg-violet-700 text-white"
+            >
+              {create.isPending ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</>
+              ) : "Create Task"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -383,6 +456,7 @@ export default function ProjectDetail() {
   const { t } = useFPBTheme();
   const utils = trpc.useUtils();
   const projectId = params?.id ?? "";
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
 
   const { data: project, isLoading, error } = trpc.fpb.getProject.useQuery(
     { id: projectId },
@@ -526,12 +600,14 @@ export default function ProjectDetail() {
               />
             ))}
             <div className="pt-2">
-              <NewTaskForm
-                projectId={projectId}
-                members={memberIds}
-                users={users as any[]}
-                tokens={t}
-              />
+              <Button
+                onClick={() => setNewTaskOpen(true)}
+                variant="outline"
+                size="sm"
+                className={`w-full ${t.btnOutline}`}
+              >
+                <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Task
+              </Button>
             </div>
           </TabsContent>
 
@@ -589,6 +665,16 @@ export default function ProjectDetail() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <NewTaskModal
+        open={newTaskOpen}
+        onClose={() => setNewTaskOpen(false)}
+        projectId={projectId}
+        projectTitle={(project as any).title}
+        members={memberIds}
+        users={users as any[]}
+        tokens={t}
+      />
     </div>
   );
 }
