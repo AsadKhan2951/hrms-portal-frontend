@@ -115,6 +115,8 @@ export function NotificationSidebar({ isOpen, onClose }: NotificationSidebarProp
         return <Bell className="h-4 w-4 text-purple-500" />;
       case "payslip_issued":
         return <DollarSign className="h-4 w-4 text-emerald-500" />;
+      case "task_assigned":
+        return <FolderKanban className="h-4 w-4 text-violet-500" />;
       case "chat":
         return <MessageSquare className="h-4 w-4 text-green-500" />;
       default:

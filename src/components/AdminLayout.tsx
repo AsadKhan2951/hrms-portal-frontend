@@ -87,7 +87,6 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
     { icon: MessageSquareText, label: "Forms", path: "/admin/forms" },
     { icon: DollarSign, label: "Payslips", path: "/admin/payslips" },
     { icon: LayoutGrid, label: "Project Board", path: "/board" },
-    { icon: FolderKanban, label: "Projects", path: "/admin/projects" },
     { icon: Calendar, label: "Calendar", path: "/calendar" },
     { icon: Users, label: "Schedule Meeting", path: "/schedule-meeting" },
     { icon: Bell, label: "Announcements", path: "/admin/announcements" },
