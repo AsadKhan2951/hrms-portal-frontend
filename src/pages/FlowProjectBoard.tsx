@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { DragDropContext, Draggable, Droppable, type DropResult } from "@hello-pangea/dnd";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Briefcase, Calendar, Code2, DollarSign, Layers, Lightbulb,
-  Loader2, Moon, MoreHorizontal, Pencil, Plus, Settings2, Sun, Trash2,
+  ArrowLeft, Calendar, Loader2, Moon, MoreHorizontal, Pencil, Plus,
+  Settings2, Sun, Trash2,
 } from "lucide-react";
 
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -22,44 +22,12 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-export type ProjectType = "dev" | "lead" | "management" | "accounting" | "other";
-export type Priority = "low" | "medium" | "high" | "urgent";
-
-export const PROJECT_TYPES: {
-  value: ProjectType; label: string; short: string; icon: React.ReactNode; color: string;
-}[] = [
-  { value: "dev", label: "Development / Design / Software", short: "Development", icon: <Code2 className="w-4 h-4" />, color: "text-violet-400" },
-  { value: "lead", label: "Lead & New Business", short: "Lead", icon: <Briefcase className="w-4 h-4" />, color: "text-blue-400" },
-  { value: "management", label: "Management / Ideas", short: "Management", icon: <Lightbulb className="w-4 h-4" />, color: "text-amber-400" },
-  { value: "accounting", label: "Accounting", short: "Accounting", icon: <DollarSign className="w-4 h-4" />, color: "text-emerald-400" },
-  { value: "other", label: "Others", short: "Other", icon: <Layers className="w-4 h-4" />, color: "text-slate-400" },
-];
-
-export const PRIORITY_COLORS: Record<Priority, string> = {
-  low: "bg-slate-500/20 text-slate-400",
-  medium: "bg-blue-500/20 text-blue-400",
-  high: "bg-amber-500/20 text-amber-400",
-  urgent: "bg-red-500/20 text-red-400",
-};
-
-const COLUMN_COLORS = [
-  "#6366f1", "#3b82f6", "#f59e0b", "#8b5cf6", "#10b981",
-  "#ef4444", "#ec4899", "#14b8a6", "#f97316", "#6b7280",
-];
-
-export function getTypeInfo(type: string) {
-  return PROJECT_TYPES.find(t => t.value === type) ?? PROJECT_TYPES[4];
-}
-
-export function formatDate(d: string | Date | null | undefined) {
-  if (!d) return null;
-  return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-}
-
-export function initialOf(user: any) {
-  return String(user?.name || user?.employeeId || "?").charAt(0).toUpperCase();
-}
+import { ProjectDetailBody } from "@/pages/fpb/ProjectDetail";
+import {
+  COLUMN_COLORS, PRIORITY_COLORS, PROJECT_TYPES,
+  formatDate, getTypeInfo, initialOf,
+  type Priority, type ProjectType,
+} from "@/pages/fpb/shared";
 
 // ─────────────────────────────────────────────────────────── New project modal
 function NewProjectModal({
@@ -464,13 +432,15 @@ function ProjectCard({
 export default function FlowProjectBoard() {
   const { user } = useAuth();
   const isAdmin = (user as any)?.role === "admin";
-  const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const { theme, toggle, t } = useFPBTheme();
 
   const [addColumnOpen, setAddColumnOpen] = useState(false);
   const [newProjectColumn, setNewProjectColumn] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string>("all");
+  // Opening a card is an overlay on the board, the way Jira and Trello do it,
+  // so the columns stay visible behind and closing returns you in place.
+  const [openProjectId, setOpenProjectId] = useState<string | null>(null);
 
   const { data: boardData, isLoading: boardLoading } = trpc.fpb.getBoard.useQuery();
   const { data: projects = [], isLoading: projectsLoading } = trpc.fpb.getProjects.useQuery(
@@ -643,7 +613,7 @@ export default function FlowProjectBoard() {
                             project={project}
                             index={index}
                             users={users as any[]}
-                            onOpen={() => navigate(`/board/project/${project.id}`)}
+                            onOpen={() => setOpenProjectId(project.id)}
                             tokens={t}
                             theme={theme}
                           />
@@ -688,6 +658,24 @@ export default function FlowProjectBoard() {
         tokens={t}
       />
       <AddColumnModal open={addColumnOpen} onClose={() => setAddColumnOpen(false)} tokens={t} />
+
+      <Dialog open={openProjectId !== null} onOpenChange={o => !o && setOpenProjectId(null)}>
+        <DialogContent
+          className={`${t.dialog} max-w-4xl w-[92vw] max-h-[88vh] overflow-y-auto p-0 gap-0`}
+        >
+          {/* Present for screen readers; the project's own heading is visible. */}
+          <DialogHeader className="sr-only">
+            <DialogTitle>Project details</DialogTitle>
+          </DialogHeader>
+          {openProjectId && (
+            <ProjectDetailBody
+              projectId={openProjectId}
+              onClose={() => setOpenProjectId(null)}
+              embedded
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

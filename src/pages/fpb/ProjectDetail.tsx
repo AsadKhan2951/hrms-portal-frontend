@@ -21,16 +21,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  PRIORITY_COLORS, formatDate, getTypeInfo, initialOf, type Priority,
-} from "@/pages/FlowProjectBoard";
-
-const STATUS_LABELS: Record<string, string> = {
-  todo: "To do",
-  in_progress: "In progress",
-  in_review: "In review",
-  blocked: "Blocked",
-  done: "Done",
-};
+  PRIORITY_COLORS, STATUS_LABELS, formatDate, getTypeInfo, initialOf,
+  type Priority,
+} from "@/pages/fpb/shared";
 
 function Avatar({ user, size = 20 }: { user: any; size?: number }) {
   return (
@@ -447,15 +440,19 @@ function NewTaskModal({
   );
 }
 
-// ────────────────────────────────────────────────────────────────── Page
-export default function ProjectDetail() {
-  const [, params] = useRoute("/board/project/:id");
-  const [, navigate] = useLocation();
+// ──────────────────────────────────────────────────────────────── Contents
+/**
+ * The project view itself. Rendered inside a dialog from the board, and also
+ * standalone at /board/project/:id so a link to a project still works on a
+ * fresh page load.
+ */
+export function ProjectDetailBody({
+  projectId, onClose, embedded = false,
+}: { projectId: string; onClose: () => void; embedded?: boolean }) {
   const { user } = useAuth();
   const isAdmin = (user as any)?.role === "admin";
   const { t } = useFPBTheme();
   const utils = trpc.useUtils();
-  const projectId = params?.id ?? "";
   const [newTaskOpen, setNewTaskOpen] = useState(false);
 
   const { data: project, isLoading, error } = trpc.fpb.getProject.useQuery(
@@ -484,7 +481,7 @@ export default function ProjectDetail() {
     onSuccess: () => {
       utils.fpb.getProjects.invalidate();
       toast.success("Project deleted");
-      navigate("/board");
+      onClose();
     },
     onError: (e: any) => toast.error(e?.message || "Could not delete the project"),
   });
@@ -497,9 +494,11 @@ export default function ProjectDetail() {
     updateMembers.mutate({ projectId, memberIds: next });
   };
 
+  const wrapper = embedded ? "" : `h-screen overflow-y-auto ${t.bg}`;
+
   if (isLoading) {
     return (
-      <div className={`flex items-center justify-center h-screen ${t.bg}`}>
+      <div className={`flex items-center justify-center ${embedded ? "h-64" : "h-screen"} ${t.bg}`}>
         <Loader2 className={`w-5 h-5 animate-spin ${t.textMuted}`} />
       </div>
     );
@@ -507,11 +506,11 @@ export default function ProjectDetail() {
 
   if (error || !project) {
     return (
-      <div className={`flex flex-col items-center justify-center h-screen gap-3 ${t.bg}`}>
+      <div className={`flex flex-col items-center justify-center gap-3 ${embedded ? "h-64" : "h-screen"} ${t.bg}`}>
         <p className={t.textSecondary}>{(error as any)?.message ?? "Project not found"}</p>
-        <Link href="/board">
-          <Button variant="outline" className={t.btnOutline}>Back to board</Button>
-        </Link>
+        <Button variant="outline" onClick={onClose} className={t.btnOutline}>
+          Back to board
+        </Button>
       </div>
     );
   }
@@ -521,15 +520,18 @@ export default function ProjectDetail() {
   const progress = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
 
   return (
-    <div className={`h-screen overflow-y-auto ${t.bg}`}>
-      <header className={`border-b ${t.border} px-6 py-4 sticky top-0 z-10 ${t.card}`}>
-        <div className="flex items-start justify-between gap-4 max-w-5xl mx-auto">
+    <div className={wrapper}>
+      <header className={`border-b ${t.border} px-6 py-4 ${embedded ? "" : `sticky top-0 z-10 ${t.card}`}`}>
+        <div className={`flex items-start justify-between gap-4 ${embedded ? "" : "max-w-5xl mx-auto"}`}>
           <div className="min-w-0">
-            <Link href="/board">
-              <button className={`flex items-center gap-1.5 text-xs mb-2 ${t.textMuted} hover:opacity-80`}>
+            {!embedded && (
+              <button
+                onClick={onClose}
+                className={`flex items-center gap-1.5 text-xs mb-2 ${t.textMuted} hover:opacity-80`}
+              >
                 <ArrowLeft className="w-3.5 h-3.5" /> Board
               </button>
-            </Link>
+            )}
             <div className={`flex items-center gap-1.5 mb-1 ${typeInfo.color}`}>
               {typeInfo.icon}
               <span className="text-[10px] font-medium uppercase tracking-wider opacity-70">
@@ -576,7 +578,7 @@ export default function ProjectDetail() {
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto p-6">
+      <div className={embedded ? "px-6 py-4" : "max-w-5xl mx-auto p-6"}>
         <Tabs defaultValue="tasks">
           <TabsList className={t.surface}>
             <TabsTrigger value="tasks">Tasks {tasks.length > 0 && `(${tasks.length})`}</TabsTrigger>
@@ -676,5 +678,22 @@ export default function ProjectDetail() {
         tokens={t}
       />
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────── Standalone route page
+/**
+ * /board/project/:id — the same view full-page, so a shared link or a refresh
+ * still lands somewhere sensible. The board itself opens this as a dialog.
+ */
+export default function ProjectDetailPage() {
+  const [, params] = useRoute("/board/project/:id");
+  const [, navigate] = useLocation();
+
+  return (
+    <ProjectDetailBody
+      projectId={params?.id ?? ""}
+      onClose={() => navigate("/board")}
+    />
   );
 }
