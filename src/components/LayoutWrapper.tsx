@@ -27,6 +27,7 @@ import {
   FolderKanban,
   Users,
   Shield,
+  LayoutGrid,
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { GlobalChatWidget } from "@/components/GlobalChatWidget";
@@ -76,7 +77,7 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
     { icon: Home, label: "Flow Central", path: "/dashboard" },
     { icon: Clock, label: "Attendance", path: "/attendance" },
     { icon: ClipboardList, label: "Leave Management", path: "/leave" },
-    { icon: FolderKanban, label: "Projects", path: "/projects" },
+    { icon: LayoutGrid, label: "Project Board", path: "/board" },
     { icon: BarChart3, label: "Reports", path: "/reports" },
     { icon: FileText, label: "Forms", path: "/forms" },
     { icon: MessageSquare, label: "Chat", path: "/chat" },

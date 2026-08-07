@@ -41,6 +41,7 @@ import {
   Timer,
   StickyNote,
   LifeBuoy,
+  LayoutGrid,
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { addHours, format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfDay, subDays } from "date-fns";
@@ -487,7 +488,7 @@ export default function Dashboard() {
     { icon: Home, label: "Flow Central", path: "/dashboard" },
     { icon: Clock, label: "Attendance", path: "/attendance" },
     { icon: ClipboardList, label: "Leave Management", path: "/leave" },
-    { icon: FolderKanban, label: "Projects", path: "/projects" },
+    { icon: LayoutGrid, label: "Project Board", path: "/board" },
     { icon: FileText, label: "Forms", path: "/forms" },
     { icon: MessageSquare, label: "Chat", path: "/chat" },
     { icon: Calendar, label: "Calendar", path: "/calendar" },
