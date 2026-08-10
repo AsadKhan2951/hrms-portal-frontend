@@ -54,3 +54,15 @@ export function formatDate(d: string | Date | null | undefined) {
 export function initialOf(user: any) {
   return String(user?.name || user?.employeeId || "?").charAt(0).toUpperCase();
 }
+
+export function Avatar({ user, size = 20 }: { user: any; size?: number }) {
+  return (
+    <span
+      title={user?.name}
+      style={{ width: size, height: size, fontSize: size * 0.42 }}
+      className="rounded-full bg-gradient-to-br from-violet-500 to-blue-500 inline-flex items-center justify-center text-white font-bold flex-shrink-0"
+    >
+      {initialOf(user)}
+    </span>
+  );
+}
