@@ -15,10 +15,10 @@ import { Avatar, formatDate, getTypeInfo } from "@/pages/fpb/shared";
 
 /** Team, project settings and activity for one project (Jira's project settings). */
 export function ProjectSettingsModal({
-  open, onClose, projectId, users, tokens, isAdmin, onDeleted,
+  open, onClose, projectId, users, tokens, canDelete, onDeleted,
 }: {
   open: boolean; onClose: () => void; projectId: string; users: any[];
-  tokens: any; isAdmin: boolean; onDeleted: () => void;
+  tokens: any; canDelete: boolean; onDeleted: () => void;
 }) {
   const utils = trpc.useUtils();
 
@@ -161,7 +161,7 @@ export function ProjectSettingsModal({
                   </div>
                 </div>
 
-                {isAdmin && (
+                {canDelete && (
                   <div className={`pt-3 border-t ${tokens.border}`}>
                     <Button
                       variant="outline"

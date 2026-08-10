@@ -220,17 +220,16 @@ export default function FlowProjectBoard() {
           })}
         </div>
 
-        {isAdmin && (
-          <div className={`p-3 border-t ${t.border}`}>
-            <Button
-              onClick={() => setNewProjectOpen(true)}
-              size="sm"
-              className="w-full bg-violet-600 hover:bg-violet-700 text-white"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1.5" /> New Project
-            </Button>
-          </div>
-        )}
+        {/* Anyone can open a space of their own and invite whoever they need. */}
+        <div className={`p-3 border-t ${t.border}`}>
+          <Button
+            onClick={() => setNewProjectOpen(true)}
+            size="sm"
+            className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+          >
+            <Plus className="w-3.5 h-3.5 mr-1.5" /> New Project
+          </Button>
+        </div>
       </aside>
 
       {/* ─────────────────────────────── Board */}
@@ -290,7 +289,7 @@ export default function FlowProjectBoard() {
         {!activeId && !projectsLoading && (
           <div className={`flex-1 flex flex-col items-center justify-center gap-2 ${t.textMuted}`}>
             <p className="text-sm">No projects yet.</p>
-            {isAdmin && <p className="text-xs">Create one from the sidebar to get started.</p>}
+            <p className="text-xs">Create your own space from the sidebar to get started.</p>
           </div>
         )}
 
@@ -401,7 +400,9 @@ export default function FlowProjectBoard() {
             projectId={activeId}
             users={users as any[]}
             tokens={t}
-            isAdmin={isAdmin}
+            // Only the owner (or an admin) may delete a space; a member invited
+            // into it must not be able to destroy it.
+            canDelete={isAdmin || String(project?.createdBy ?? "") === (user as any)?.id}
             onDeleted={() => { setSettingsOpen(false); setSelectedId(null); }}
           />
         </>
