@@ -20,11 +20,19 @@ export default function Login() {
   const [twoFactorQr, setTwoFactorQr] = useState<string | null>(null);
   const [twoFactorSecret, setTwoFactorSecret] = useState<string | null>(null);
   const [twoFactorCode, setTwoFactorCode] = useState("");
-  const meQuery = trpc.auth.me.useQuery(undefined, { enabled: false, retry: false });
-
-  const redirectByRole = async () => {
-    const result = await meQuery.refetch();
-    const role = (result.data as any)?.role;
+  /**
+   * Where to land after signing in.
+   *
+   * This used to refetch auth.me and read the role off that. It was the same
+   * GET URL the page had already fetched while signed out, and API responses
+   * carried no cache headers, so the browser could replay the earlier `null` -
+   * the role came back undefined and the dashboard's own auth check then
+   * bounced straight back here. That was the login loop on iPhones.
+   *
+   * The role now comes from the sign-in response itself, which cannot be a
+   * stale read of anything.
+   */
+  const redirectByRole = (role?: string) => {
     window.location.href = role === "admin" ? "/admin" : "/dashboard";
   };
 
@@ -40,7 +48,7 @@ export default function Login() {
         return;
       }
       toast.success("Login successful!");
-      await redirectByRole();
+      redirectByRole(data?.user?.role);
     },
     onError: (error) => {
       toast.error(error.message || "Login failed");
@@ -48,9 +56,12 @@ export default function Login() {
   });
 
   const verifyMutation = trpc.auth.verifyTwoFactor.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (data: any) => {
       toast.success("Verification successful!");
-      await redirectByRole();
+      // Only admins are sent through two-factor, so this is "admin" in
+      // practice; reading it from the response keeps that from being an
+      // assumption baked into the client.
+      redirectByRole(data?.role);
     },
     onError: (error) => {
       toast.error(error.message || "Verification failed");
