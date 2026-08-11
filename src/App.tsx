@@ -29,9 +29,10 @@ import ScheduleMeeting from "./pages/ScheduleMeeting";
 import FlowProjectBoard from "./pages/FlowProjectBoard";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { user, loading } = useAuth();
+  const { user, loading, isSignedOut, error, refresh } = useAuth();
 
   if (loading) {
     return (
@@ -41,8 +42,28 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     );
   }
 
-  if (!user) {
+  // Only send someone to the login page when the server actually said they are
+  // signed out. This used to redirect on any absence of a user, so a request
+  // that merely failed - a dropped connection on a phone, say - looked exactly
+  // like a rejected session and dumped people back at the login screen.
+  if (isSignedOut) {
     return <Redirect to="/" />;
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-background px-6 text-center">
+        <p className="text-sm text-muted-foreground">
+          Could not reach the server. Your session is still fine.
+        </p>
+        {error?.message && (
+          <p className="text-xs text-muted-foreground/70">{error.message}</p>
+        )}
+        <Button variant="outline" size="sm" onClick={() => refresh()}>
+          Try again
+        </Button>
+      </div>
+    );
   }
 
   return <Component />;
