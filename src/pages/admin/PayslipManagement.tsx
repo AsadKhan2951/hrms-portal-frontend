@@ -30,6 +30,7 @@ import {
   Download,
   Loader2,
   Check,
+  Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Redirect } from "wouter";
@@ -66,7 +67,9 @@ export default function PayslipManagement() {
 
   const createPayslipMutation = trpc.admin.createPayslip.useMutation();
   const setPaidMutation = trpc.admin.setPayslipPaid.useMutation();
+  const deleteMutation = trpc.admin.deletePayslip.useMutation();
   const [pendingPaidId, setPendingPaidId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const togglePaid = async (payslip: any) => {
     const nowPaid = !payslip.paidAt;
@@ -86,6 +89,42 @@ export default function PayslipManagement() {
       );
     } finally {
       setPendingPaidId(null);
+    }
+  };
+
+  /**
+   * Deleting is for a payslip issued to the wrong person, so it removes it from
+   * that employee's portal as well. There is no undo, hence the confirmation
+   * naming who it belongs to - the whole point is that the wrong name was
+   * picked once already.
+   */
+  const deletePayslip = async (payslip: any) => {
+    const who = payslip.user?.name || "this employee";
+    const period = payslip.month && payslip.year
+      ? new Date(payslip.year, payslip.month - 1).toLocaleDateString("en-GB", {
+          month: "long",
+          year: "numeric",
+        })
+      : "this period";
+
+    const confirmed = window.confirm(
+      `Delete the ${period} payslip for ${who}?\n\n` +
+        `It will disappear from their portal too, along with the notification ` +
+        `about it. This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setPendingDeleteId(payslip.id);
+    try {
+      await deleteMutation.mutateAsync({ payslipId: payslip.id });
+      await utils.admin.getPayslips.invalidate();
+      toast.success(`Deleted. It is no longer on ${who}'s portal.`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete the payslip"
+      );
+    } finally {
+      setPendingDeleteId(null);
     }
   };
 
@@ -338,6 +377,22 @@ export default function PayslipManagement() {
                           <Download className="h-4 w-4" />
                         </Button>
                       )}
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => deletePayslip(payslip)}
+                        disabled={pendingDeleteId === payslip.id}
+                        aria-label="Delete payslip"
+                        title="Delete this payslip, on the employee's side too"
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        {pendingDeleteId === payslip.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
                     </div>
                   </div>
                 ))
