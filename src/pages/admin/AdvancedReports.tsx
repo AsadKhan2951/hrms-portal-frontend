@@ -24,6 +24,7 @@ import {
   Activity,
 } from "lucide-react";
 import { Redirect } from "wouter";
+import { isOrgWide } from "@/lib/roles";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -32,7 +33,7 @@ export default function AdvancedReports() {
   const [selectedReport, setSelectedReport] = useState("attendance-summary");
   const [selectedMonth, setSelectedMonth] = useState("February 2026");
 
-  if (user && user.role !== "admin") {
+  if (user && !isOrgWide(user.role)) {
     return <Redirect to="/dashboard" />;
   }
 

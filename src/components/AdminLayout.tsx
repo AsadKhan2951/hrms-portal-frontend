@@ -28,6 +28,7 @@ import {
   FileText
 } from "lucide-react";
 import { Link, useLocation, Redirect } from "wouter";
+import { hasRank, isAnyHead, type Role } from "@/lib/roles";
 import { trpc } from "@/lib/trpc";
 import { useRealtime } from "@/_core/hooks/useRealtime";
 import { toast } from "sonner";
@@ -76,26 +77,29 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
   };
 
   // Check if user is admin
-  if (user && user.role !== "admin") {
+  if (user && !isAnyHead(user.role)) {
     return <Redirect to="/dashboard" />;
   }
 
   const menuItems = [
-    { icon: Home, label: "Overview", path: "/admin" },
-    { icon: Users, label: "Employees", path: "/admin/employees" },
-    { icon: FileCheck, label: "Leaves", path: "/admin/leaves" },
-    { icon: MessageSquareText, label: "Forms", path: "/admin/forms" },
-    { icon: DollarSign, label: "Payslips", path: "/admin/payslips" },
-    { icon: LayoutGrid, label: "Project Board", path: "/board" },
-    { icon: Calendar, label: "Calendar", path: "/calendar" },
-    { icon: Users, label: "Schedule Meeting", path: "/schedule-meeting" },
-    { icon: Bell, label: "Announcements", path: "/admin/announcements" },
-    { icon: BarChart3, label: "Reports", path: "/admin/reports" },
-    { icon: BarChart3, label: "Employee Reports", path: "/reports" },
-    { icon: Clock, label: "Clock-Out Reports", path: "/admin/reports" },
-    { icon: Mail, label: "Email", path: "/chat" },
-    { icon: FileText, label: "Notes", path: "/forms" },
-  ];
+    // `minRole` keeps a department head out of the organisation-wide pages
+    // they can reach the shell for. The backend refuses them anyway; this is
+    // so they are not shown doors that will not open.
+    { icon: Home, label: "Overview", path: "/admin", minRole: "head_of_ops" },
+    { icon: Users, label: "Employees", path: "/admin/employees", minRole: "head_of_ops" },
+    { icon: FileCheck, label: "Leaves", path: "/admin/leaves", minRole: "dept_head" },
+    { icon: MessageSquareText, label: "Forms", path: "/admin/forms", minRole: "head_of_ops" },
+    { icon: DollarSign, label: "Payslips", path: "/admin/payslips", minRole: "head_of_ops" },
+    { icon: LayoutGrid, label: "Project Board", path: "/board", minRole: "dept_head" },
+    { icon: Calendar, label: "Calendar", path: "/calendar", minRole: "dept_head" },
+    { icon: Users, label: "Schedule Meeting", path: "/schedule-meeting", minRole: "dept_head" },
+    { icon: Bell, label: "Announcements", path: "/admin/announcements", minRole: "head_of_ops" },
+    { icon: BarChart3, label: "Reports", path: "/admin/reports", minRole: "head_of_ops" },
+    { icon: BarChart3, label: "Employee Reports", path: "/reports", minRole: "head_of_ops" },
+    { icon: Clock, label: "Clock-Out Reports", path: "/admin/reports", minRole: "head_of_ops" },
+    { icon: Mail, label: "Email", path: "/chat", minRole: "dept_head" },
+    { icon: FileText, label: "Notes", path: "/forms", minRole: "dept_head" },
+  ].filter(item => hasRank(user?.role, item.minRole as Role));
 
   const isActive = (path: string) => location === path;
 

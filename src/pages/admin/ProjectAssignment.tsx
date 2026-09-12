@@ -1,4 +1,4 @@
-﻿import AdminLayout from "@/components/AdminLayout";
+import AdminLayout from "@/components/AdminLayout";
 import { useState, useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ import {
   Edit,
 } from "lucide-react";
 import { Redirect } from "wouter";
+import { isOrgWide } from "@/lib/roles";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
@@ -151,7 +152,7 @@ export default function ProjectAssignment() {
     },
   });
 
-  if (user && user.role !== "admin") {
+  if (user && !isOrgWide(user.role)) {
     return <Redirect to="/dashboard" />;
   }
 

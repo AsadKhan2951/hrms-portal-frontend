@@ -19,12 +19,13 @@ import {
   Timer,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { isOrgWide } from "@/lib/roles";
 import { format, subDays } from "date-fns";
 import { toast } from "sonner";
 
 export default function Reports() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = isOrgWide(user?.role);
   const defaultEnd = format(new Date(), "yyyy-MM-dd");
   const defaultStart = format(subDays(new Date(), 6), "yyyy-MM-dd");
 

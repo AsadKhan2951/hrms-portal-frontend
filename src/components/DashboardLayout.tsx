@@ -127,7 +127,7 @@ function DashboardLayoutContent({
     { icon: DollarSign, label: "Payslips", path: "/payslips" },
     { icon: Bell, label: "Announcements", path: "/announcements" },
     { icon: Settings, label: "Account", path: "/account" },
-    ...(user?.role === "admin" ? [{ icon: Shield, label: "Admin Panel", path: "/admin" }] : []),
+    ...(isAnyHead(user?.role) ? [{ icon: Shield, label: "Admin Panel", path: "/admin" }] : []),
   ];
 
   const activeMenuItem = menuItems.find(item => item.path === location);

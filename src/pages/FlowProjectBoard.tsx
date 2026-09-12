@@ -10,6 +10,7 @@ import {
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useFPBTheme } from "@/hooks/useFPBTheme";
 import { trpc } from "@/lib/trpc";
+import { isOrgWide } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -31,7 +32,7 @@ const SELECTED_KEY = "fpb-selected-project";
 
 export default function FlowProjectBoard() {
   const { user } = useAuth();
-  const isAdmin = (user as any)?.role === "admin";
+  const isAdmin = isOrgWide((user as any)?.role);
   const utils = trpc.useUtils();
   const { theme, toggle, t } = useFPBTheme();
 

@@ -22,6 +22,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Redirect } from "wouter";
+import { isAnyHead } from "@/lib/roles";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { trpc } from "@/lib/trpc";
@@ -42,7 +43,7 @@ export default function LeaveApproval() {
     },
   });
 
-  if (user && user.role !== "admin") {
+  if (user && !isAnyHead(user.role)) {
     return <Redirect to="/dashboard" />;
   }
 
