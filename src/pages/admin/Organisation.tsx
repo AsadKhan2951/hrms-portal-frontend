@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Redirect } from "wouter";
 import { toast } from "sonner";
 import {
-  Building2, Check, Crown, KanbanSquare, Loader2, Plus, Shield, UserCog, Users,
+  Building2, Crown, KanbanSquare, Loader2, Plus, Shield, Trash2, Users,
 } from "lucide-react";
 
 import AdminLayout from "@/components/AdminLayout";
@@ -69,6 +69,13 @@ export default function Organisation() {
   });
   const setDept = trpc.admin.setUserDepartment.useMutation({
     onSuccess: async () => { await refresh(); toast.success("Moved"); },
+    onError,
+  });
+  const deleteDept = trpc.admin.deleteDepartment.useMutation({
+    onSuccess: async (removed: any) => {
+      await refresh();
+      toast.success(`${removed?.name ?? "Department"} deleted`);
+    },
     onError,
   });
 
@@ -243,6 +250,32 @@ export default function Organisation() {
                         </span>
                       </div>
                     </div>
+
+                    {superAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mb-0.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        // An empty department is the only one safe to remove:
+                        // anyone left pointing at a deleted one would have no
+                        // head, and their leave would stop routing anywhere.
+                        // The server refuses it too, with the same reason.
+                        disabled={dept.memberCount > 0 || busyId === dept.id}
+                        title={
+                          dept.memberCount > 0
+                            ? `Move its ${dept.memberCount} ${dept.memberCount === 1 ? "person" : "people"} out first`
+                            : "Delete this department"
+                        }
+                        onClick={() => {
+                          if (!window.confirm(`Delete ${dept.name}?`)) return;
+                          withBusy(dept.id, () =>
+                            deleteDept.mutateAsync({ departmentId: dept.id })
+                          );
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               </Card>
