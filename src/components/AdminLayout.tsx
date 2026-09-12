@@ -25,7 +25,8 @@ import {
   Activity,
   Settings,
   Mail,
-  FileText
+  FileText,
+  Building2
 } from "lucide-react";
 import { Link, useLocation, Redirect } from "wouter";
 import { hasRank, isAnyHead, type Role } from "@/lib/roles";
@@ -87,6 +88,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
     // so they are not shown doors that will not open.
     { icon: Home, label: "Overview", path: "/admin", minRole: "head_of_ops" },
     { icon: Users, label: "Employees", path: "/admin/employees", minRole: "head_of_ops" },
+    { icon: Building2, label: "Organisation", path: "/admin/organisation", minRole: "head_of_ops" },
     { icon: FileCheck, label: "Leaves", path: "/admin/leaves", minRole: "dept_head" },
     { icon: MessageSquareText, label: "Forms", path: "/admin/forms", minRole: "head_of_ops" },
     { icon: DollarSign, label: "Payslips", path: "/admin/payslips", minRole: "head_of_ops" },

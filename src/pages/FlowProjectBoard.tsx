@@ -50,6 +50,9 @@ export default function FlowProjectBoard() {
   const { data: projects = [], isLoading: projectsLoading } =
     trpc.fpb.getProjects.useQuery(filterType !== "all" ? { projectType: filterType } : undefined);
   const { data: users = [] } = trpc.fpb.getUsers.useQuery();
+  // Opening a project is a granted right now, so the button is hidden rather
+  // than offered and then refused. The server checks this again.
+  const { data: mayCreate = false } = trpc.fpb.canCreateProjects.useQuery();
 
   // Fall back to the first project when nothing is chosen, or when the chosen
   // one has been deleted or filtered out.
@@ -221,16 +224,17 @@ export default function FlowProjectBoard() {
           })}
         </div>
 
-        {/* Anyone can open a space of their own and invite whoever they need. */}
-        <div className={`p-3 border-t ${t.border}`}>
-          <Button
-            onClick={() => setNewProjectOpen(true)}
-            size="sm"
-            className="w-full bg-violet-600 hover:bg-violet-700 text-white"
-          >
-            <Plus className="w-3.5 h-3.5 mr-1.5" /> New Project
-          </Button>
-        </div>
+        {mayCreate && (
+          <div className={`p-3 border-t ${t.border}`}>
+            <Button
+              onClick={() => setNewProjectOpen(true)}
+              size="sm"
+              className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1.5" /> New Project
+            </Button>
+          </div>
+        )}
       </aside>
 
       {/* ─────────────────────────────── Board */}
@@ -290,7 +294,11 @@ export default function FlowProjectBoard() {
         {!activeId && !projectsLoading && (
           <div className={`flex-1 flex flex-col items-center justify-center gap-2 ${t.textMuted}`}>
             <p className="text-sm">No projects yet.</p>
-            <p className="text-xs">Create your own space from the sidebar to get started.</p>
+            <p className="text-xs">
+              {mayCreate
+                ? "Create one from the sidebar to get started."
+                : "You will see a project here once you are added to one."}
+            </p>
           </div>
         )}
 
