@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { trpc } from "@/lib/trpc";
+import { isAnyHead } from "@/lib/roles";
 import { TimeInOutDialog } from "@/components/TimeInOutDialog";
 import { getAvatarById } from "@shared/avatars";
 import {
@@ -496,7 +497,7 @@ export default function Dashboard() {
     { icon: DollarSign, label: "Payslips", path: "/payslips" },
     { icon: Bell, label: "Announcements", path: "/announcements" },
     { icon: Settings, label: "Account", path: "/account" },
-    ...(user?.role === "admin" ? [{ icon: Shield, label: "Admin Panel", path: "/admin" }] : []),
+    ...(isAnyHead(user?.role) ? [{ icon: Shield, label: "Admin Panel", path: "/admin" }] : []),
   ];
 
   const filteredMenuItems = menuItems.filter(item =>

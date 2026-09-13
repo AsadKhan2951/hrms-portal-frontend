@@ -43,6 +43,7 @@ import {
   History
 } from "lucide-react";
 import { Redirect } from "wouter";
+import { isOrgWide } from "@/lib/roles";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -96,7 +97,7 @@ export default function EmployeeManagement() {
   const [isUpdating, setIsUpdating] = useState(false);
 
   // Redirect if not admin
-  if (user?.role !== "admin") {
+  if (!isOrgWide(user?.role)) {
     return <Redirect to="/" />;
   }
 

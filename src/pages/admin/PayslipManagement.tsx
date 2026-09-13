@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Redirect } from "wouter";
+import { isOrgWide } from "@/lib/roles";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { trpc } from "@/lib/trpc";
@@ -128,7 +129,7 @@ export default function PayslipManagement() {
     }
   };
 
-  if (user && user.role !== "admin") {
+  if (user && !isOrgWide(user.role)) {
     return <Redirect to="/dashboard" />;
   }
 

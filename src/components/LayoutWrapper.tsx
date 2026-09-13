@@ -4,6 +4,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
+import { isAnyHead } from "@/lib/roles";
 import { useRealtime } from "@/_core/hooks/useRealtime";
 import {
   Clock,
@@ -86,7 +87,7 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
     { icon: DollarSign, label: "Payslips", path: "/payslips" },
     { icon: Bell, label: "Announcements", path: "/announcements" },
     { icon: Settings, label: "Account", path: "/account" },
-    ...(user?.role === "admin" ? [{ icon: Shield, label: "Admin Panel", path: "/admin" }] : []),
+    ...(isAnyHead(user?.role) ? [{ icon: Shield, label: "Admin Panel", path: "/admin" }] : []),
   ];
 
   const filteredMenuItems = menuItems.filter(item =>

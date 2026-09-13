@@ -26,6 +26,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { Redirect } from "wouter";
+import { isOrgWide } from "@/lib/roles";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { downloadCsv } from "@/lib/csv";
@@ -95,7 +96,7 @@ export default function AdvancedReports() {
 
   const { data: employeeStatuses = [] } = trpc.admin.getEmployeeStatusSnapshot.useQuery();
 
-  if (user && user.role !== "admin") {
+  if (user && !isOrgWide(user.role)) {
     return <Redirect to="/dashboard" />;
   }
 

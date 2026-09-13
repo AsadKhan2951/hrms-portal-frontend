@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { trpc } from "@/lib/trpc";
+import { isAnyHead } from "@/lib/roles";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -33,7 +34,7 @@ export default function Login() {
    * stale read of anything.
    */
   const redirectByRole = (role?: string) => {
-    window.location.href = role === "admin" ? "/admin" : "/dashboard";
+    window.location.href = isAnyHead(role) ? "/admin" : "/dashboard";
   };
 
   const loginMutation = trpc.auth.customLogin.useMutation({
@@ -58,9 +59,8 @@ export default function Login() {
   const verifyMutation = trpc.auth.verifyTwoFactor.useMutation({
     onSuccess: async (data: any) => {
       toast.success("Verification successful!");
-      // Only admins are sent through two-factor, so this is "admin" in
-      // practice; reading it from the response keeps that from being an
-      // assumption baked into the client.
+      // Two-factor covers admins and heads of operations, so the role has to
+      // come from the response rather than being assumed.
       redirectByRole(data?.role);
     },
     onError: (error) => {

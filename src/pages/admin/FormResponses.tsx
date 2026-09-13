@@ -22,6 +22,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Redirect } from "wouter";
+import { isOrgWide } from "@/lib/roles";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { trpc } from "@/lib/trpc";
@@ -39,7 +40,7 @@ export default function FormResponses() {
     onSuccess: () => utils.admin.getFormSubmissions.invalidate(),
   });
 
-  if (user && user.role !== "admin") {
+  if (user && !isOrgWide(user.role)) {
     return <Redirect to="/dashboard" />;
   }
 

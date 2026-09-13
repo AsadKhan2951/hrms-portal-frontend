@@ -24,6 +24,7 @@ import PayslipManagement from "./pages/admin/PayslipManagement";
 import ProjectAssignment from "./pages/admin/ProjectAssignment";
 import AdvancedReports from "./pages/admin/AdvancedReports";
 import AnnouncementsManagement from "./pages/admin/AnnouncementsManagement";
+import Organisation from "./pages/admin/Organisation";
 import Calendar from "./pages/Calendar";
 import ScheduleMeeting from "./pages/ScheduleMeeting";
 import FlowProjectBoard from "./pages/FlowProjectBoard";
@@ -131,6 +132,9 @@ function Router() {
       </Route>
       <Route path="/admin/reports">
         {() => <ProtectedRoute component={AdvancedReports} />}
+      </Route>
+      <Route path="/admin/organisation">
+        {() => <ProtectedRoute component={Organisation} />}
       </Route>
       <Route path="/admin/announcements">
         {() => <ProtectedRoute component={AnnouncementsManagement} />}
