@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { trpc } from "@/lib/trpc";
-import { isAnyHead } from "@/lib/roles";
+import { isAnyHead, isOrgWide } from "@/lib/roles";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -34,7 +34,11 @@ export default function Login() {
    * stale read of anything.
    */
   const redirectByRole = (role?: string) => {
-    window.location.href = isAnyHead(role) ? "/admin" : "/dashboard";
+    // Org-wide roles get the full admin overview; a department head lands on
+    // their own team, since the overview is organisation-wide and not theirs
+    // to see; everyone else gets the employee dashboard.
+    const target = isOrgWide(role) ? "/admin" : isAnyHead(role) ? "/admin/team" : "/dashboard";
+    window.location.href = target;
   };
 
   const loginMutation = trpc.auth.customLogin.useMutation({

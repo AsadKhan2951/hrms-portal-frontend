@@ -54,3 +54,15 @@ export const ROLE_LABELS: Record<Role, string> = {
 export function roleLabel(role: string | undefined | null): string {
   return ROLE_LABELS[(role ?? "") as Role] ?? "Employee";
 }
+
+/**
+ * A staff member rather than a system administrator - the people who belong in
+ * payslip, report and assignment pickers.
+ *
+ * These lists used to filter to role === "user", which quietly dropped
+ * department heads and the head of operations once those became their own
+ * roles: they are still staff who draw a salary and show up in reports.
+ */
+export function isStaff(role: string | undefined | null): boolean {
+  return (role ?? "") !== "admin";
+}

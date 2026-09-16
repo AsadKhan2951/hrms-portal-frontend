@@ -27,17 +27,26 @@ import { Link } from "wouter";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Bar } from "recharts";
 import { trpc } from "@/lib/trpc";
 import { format, formatDistanceToNow } from "date-fns";
+import { Redirect } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { isOrgWide } from "@/lib/roles";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
-  const { data: employeeStatuses = [] } = trpc.admin.getEmployeeStatusSnapshot.useQuery();
-  const { data: leaveRequests = [] } = trpc.admin.getLeaveRequests.useQuery();
-  const { data: formSubmissions = [] } = trpc.admin.getFormSubmissions.useQuery();
-  const { data: projects = [] } = trpc.admin.getProjectsOverview.useQuery();
-  const { data: ongoingTasks = [] } = trpc.admin.getOngoingTasks.useQuery();
-  const { data: avgHoursData = [] } = trpc.admin.getAverageHours.useQuery({ days: 5 });
-  const { data: resourcePerformance = [] } = trpc.admin.getResourcePerformance.useQuery();
+  // This overview is organisation-wide - every widget it draws is gated to
+  // head_of_ops and above, so a department head landing here would see nothing
+  // but errors. Send them to the view that is actually theirs. The queries
+  // below stay disabled for them so no forbidden request is even fired; the
+  // redirect itself is returned after the hooks, to keep their order stable.
+  const orgWide = isOrgWide(user?.role);
+  const q = { enabled: orgWide };
+  const { data: employeeStatuses = [] } = trpc.admin.getEmployeeStatusSnapshot.useQuery(undefined, q);
+  const { data: leaveRequests = [] } = trpc.admin.getLeaveRequests.useQuery(undefined, q);
+  const { data: formSubmissions = [] } = trpc.admin.getFormSubmissions.useQuery(undefined, q);
+  const { data: projects = [] } = trpc.admin.getProjectsOverview.useQuery(undefined, q);
+  const { data: ongoingTasks = [] } = trpc.admin.getOngoingTasks.useQuery(undefined, q);
+  const { data: avgHoursData = [] } = trpc.admin.getAverageHours.useQuery({ days: 5 }, q);
+  const { data: resourcePerformance = [] } = trpc.admin.getResourcePerformance.useQuery(undefined, q);
   const { data: notifications = [] } = trpc.notifications.getAll.useQuery();
   const utils = trpc.useUtils();
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
@@ -194,6 +203,12 @@ export default function AdminDashboard() {
   const capturedLabel = selectedCoords?.capturedAt
     ? formatDistanceToNow(new Date(selectedCoords.capturedAt), { addSuffix: true })
     : null;
+
+  // After every hook, so their order never changes: a department head who
+  // reaches this org-wide overview is sent to their own team instead.
+  if (user && !orgWide) {
+    return <Redirect to="/admin/team" />;
+  }
 
   return (
     <AdminLayout title="Admin Dashboard">
@@ -431,7 +446,7 @@ export default function AdminDashboard() {
                   <div>
                     <p className="text-sm font-medium">{leave.user?.name || "Employee"}</p>
                     <p className="text-xs text-muted-foreground">
-                      {leave.leaveType} • {leave.startDate ? format(new Date(leave.startDate), "MMM dd") : "--"} - {leave.endDate ? format(new Date(leave.endDate), "MMM dd") : "--"}
+                      {leave.leaveType} ï¿½ {leave.startDate ? format(new Date(leave.startDate), "MMM dd") : "--"} - {leave.endDate ? format(new Date(leave.endDate), "MMM dd") : "--"}
                     </p>
                   </div>
                   <div className="flex gap-2">

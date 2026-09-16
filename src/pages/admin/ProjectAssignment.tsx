@@ -33,7 +33,7 @@ import {
   Edit,
 } from "lucide-react";
 import { Redirect } from "wouter";
-import { isOrgWide } from "@/lib/roles";
+import { isOrgWide, isStaff } from "@/lib/roles";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
@@ -66,7 +66,7 @@ export default function ProjectAssignment() {
 
   const utils = trpc.useUtils();
   const { data: employeeData = [], isLoading: employeesLoading } = trpc.employees.list.useQuery();
-  const employees = employeeData.filter((emp: any) => emp?.role === "user");
+  const employees = employeeData.filter((emp: any) => isStaff(emp?.role));
   const { data: projects = [], isLoading: projectsLoading } = trpc.admin.getProjectsOverview.useQuery();
   const { data: projectTasks = [], isLoading: projectTasksLoading } = trpc.admin.getProjectTasks.useQuery(
     { projectId: selectedProjectId },
