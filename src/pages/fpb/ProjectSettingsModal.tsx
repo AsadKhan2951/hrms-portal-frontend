@@ -1,9 +1,12 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Activity as ActivityIcon, Check, Loader2, Trash2, Users } from "lucide-react";
+import { Activity as ActivityIcon, Check, Loader2, Save, Trash2, Users } from "lucide-react";
 
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -11,7 +14,14 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Avatar, formatDate, getTypeInfo } from "@/pages/fpb/shared";
+import { Avatar, PROJECT_TYPES, formatDate, getTypeInfo } from "@/pages/fpb/shared";
+
+/** A project's dueDate (ISO or Date) as the YYYY-MM-DD an <input type=date> wants. */
+function toDateInput(value: unknown): string {
+  if (!value) return "";
+  const d = new Date(value as string);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+}
 
 /** Team, project settings and activity for one project (Jira's project settings). */
 export function ProjectSettingsModal({
@@ -50,6 +60,47 @@ export function ProjectSettingsModal({
     },
     onError,
   });
+
+  // Editable copy of the project's own fields. Seeded whenever a different
+  // project is opened; status and priority still save on change, the rest
+  // through the Save button so a half-typed name is not written on every key.
+  const [form, setForm] = useState({
+    title: "", description: "", projectType: "other", dueDate: "",
+  });
+  useEffect(() => {
+    if (!project) return;
+    const p = project as any;
+    setForm({
+      title: p.title ?? "",
+      description: p.description ?? "",
+      projectType: p.projectType ?? "other",
+      dueDate: toDateInput(p.dueDate),
+    });
+  }, [(project as any)?.id]);
+
+  const dirty =
+    Boolean(project) &&
+    (form.title.trim() !== ((project as any).title ?? "") ||
+      form.description !== ((project as any).description ?? "") ||
+      form.projectType !== ((project as any).projectType ?? "other") ||
+      form.dueDate !== toDateInput((project as any).dueDate));
+
+  const saveDetails = () => {
+    if (!form.title.trim()) {
+      toast.error("A project needs a name");
+      return;
+    }
+    updateProject.mutate(
+      {
+        id: projectId,
+        title: form.title.trim(),
+        description: form.description,
+        projectType: form.projectType as any,
+        dueDate: form.dueDate ? new Date(`${form.dueDate}T12:00:00`) : null,
+      },
+      { onSuccess: () => toast.success("Project updated") }
+    );
+  };
   const deleteProject = trpc.fpb.deleteProject.useMutation({
     onSuccess: () => {
       utils.fpb.getProjects.invalidate();
@@ -125,15 +176,78 @@ export function ProjectSettingsModal({
               </TabsContent>
 
               <TabsContent value="settings" className="mt-4 space-y-4">
-                {(project as any).description && (
-                  <p className={`text-sm ${tokens.textSecondary}`}>{(project as any).description}</p>
-                )}
+                <div>
+                  <Label className={`text-xs mb-1 block ${tokens.textMuted}`}>Project name</Label>
+                  <Input
+                    value={form.title}
+                    onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                    className={`h-9 text-sm ${tokens.input}`}
+                  />
+                </div>
+
+                <div>
+                  <Label className={`text-xs mb-1 block ${tokens.textMuted}`}>Description</Label>
+                  <Textarea
+                    value={form.description}
+                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                    rows={3}
+                    placeholder="What is this project about?"
+                    className={`${tokens.input} resize-none text-sm`}
+                  />
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Status</label>
+                    <Label className={`text-xs mb-1 block ${tokens.textMuted}`}>Type</Label>
+                    <Select
+                      value={form.projectType}
+                      onValueChange={v => setForm(f => ({ ...f, projectType: v }))}
+                    >
+                      <SelectTrigger className={`h-8 text-xs ${tokens.select}`}><SelectValue /></SelectTrigger>
+                      <SelectContent className={tokens.selectContent}>
+                        {PROJECT_TYPES.map(pt => (
+                          <SelectItem key={pt.value} value={pt.value} className="text-xs">
+                            <span className={`flex items-center gap-1.5 ${pt.color}`}>{pt.icon} {pt.short}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className={`text-xs mb-1 block ${tokens.textMuted}`}>Due date</Label>
+                    <Input
+                      type="date"
+                      value={form.dueDate}
+                      onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
+                      className={`h-8 text-xs ${tokens.input}`}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={saveDetails}
+                    disabled={!dirty || updateProject.isPending}
+                    className="bg-violet-600 hover:bg-violet-700 text-white"
+                  >
+                    {updateProject.isPending
+                      ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Saving...</>
+                      : <><Save className="w-3.5 h-3.5 mr-1.5" />Save changes</>}
+                  </Button>
+                </div>
+
+                {/* Status and priority save the moment they change - they are
+                    the two people flip most often. */}
+                <div className={`grid grid-cols-2 gap-3 pt-3 border-t ${tokens.border}`}>
+                  <div>
+                    <Label className={`text-xs mb-1 block ${tokens.textMuted}`}>Status</Label>
                     <Select
                       value={(project as any).status}
-                      onValueChange={v => updateProject.mutate({ id: projectId, status: v as any })}
+                      onValueChange={v =>
+                        updateProject.mutate({ id: projectId, status: v as any },
+                          { onSuccess: () => toast.success("Status updated") })
+                      }
                     >
                       <SelectTrigger className={`h-8 text-xs ${tokens.select}`}><SelectValue /></SelectTrigger>
                       <SelectContent className={tokens.selectContent}>
@@ -146,10 +260,13 @@ export function ProjectSettingsModal({
                     </Select>
                   </div>
                   <div>
-                    <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Priority</label>
+                    <Label className={`text-xs mb-1 block ${tokens.textMuted}`}>Priority</Label>
                     <Select
                       value={(project as any).priority}
-                      onValueChange={v => updateProject.mutate({ id: projectId, priority: v as any })}
+                      onValueChange={v =>
+                        updateProject.mutate({ id: projectId, priority: v as any },
+                          { onSuccess: () => toast.success("Priority updated") })
+                      }
                     >
                       <SelectTrigger className={`h-8 text-xs ${tokens.select}`}><SelectValue /></SelectTrigger>
                       <SelectContent className={tokens.selectContent}>
