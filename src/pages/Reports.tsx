@@ -19,7 +19,7 @@ import {
   Timer,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { isOrgWide } from "@/lib/roles";
+import { isOrgWide, isStaff } from "@/lib/roles";
 import { format, subDays } from "date-fns";
 import { toast } from "sonner";
 
@@ -36,7 +36,7 @@ export default function Reports() {
   const { data: employeeData = [] } = trpc.employees.list.useQuery(undefined, {
     enabled: isAdmin,
   });
-  const employees = employeeData.filter((emp: any) => emp?.role === "user");
+  const employees = employeeData.filter((emp: any) => isStaff(emp?.role));
 
   useEffect(() => {
     if (!user) return;

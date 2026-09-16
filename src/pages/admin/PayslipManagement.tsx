@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Redirect } from "wouter";
-import { isOrgWide } from "@/lib/roles";
+import { isOrgWide, isStaff } from "@/lib/roles";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { trpc } from "@/lib/trpc";
@@ -63,7 +63,9 @@ export default function PayslipManagement() {
   const [isSaving, setIsSaving] = useState(false);
 
   const { data: employeeData = [], isLoading: employeesLoading } = trpc.employees.list.useQuery();
-  const employees = employeeData.filter((emp: any) => emp?.role === "user");
+  // Department heads and the head of operations draw payslips too; the old
+  // role === "user" test dropped them once they became their own roles.
+  const employees = employeeData.filter((emp: any) => isStaff(emp?.role));
   const { data: payslips = [], isLoading: payslipsLoading } = trpc.admin.getPayslips.useQuery();
 
   const createPayslipMutation = trpc.admin.createPayslip.useMutation();
