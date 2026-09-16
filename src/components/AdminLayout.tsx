@@ -87,6 +87,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
     // they can reach the shell for. The backend refuses them anyway; this is
     // so they are not shown doors that will not open.
     { icon: Home, label: "Overview", path: "/admin", minRole: "head_of_ops" },
+    { icon: Users, label: "My Team", path: "/admin/team", minRole: "dept_head" },
     { icon: Users, label: "Employees", path: "/admin/employees", minRole: "head_of_ops" },
     { icon: Building2, label: "Organisation", path: "/admin/organisation", minRole: "head_of_ops" },
     { icon: FileCheck, label: "Leaves", path: "/admin/leaves", minRole: "dept_head" },
