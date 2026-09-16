@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { DragDropContext, Droppable, type DropResult } from "@hello-pangea/dnd";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Loader2, MoreHorizontal, Pencil, Plus, Search, Settings2,
+  ArrowLeft, Loader2, MoreHorizontal, Pencil, Plus, Search, Settings, Settings2,
   Sun, Moon, Trash2, Users,
 } from "lucide-react";
 
@@ -265,10 +265,11 @@ export default function FlowProjectBoard() {
                   onClick={() => setSettingsOpen(true)}
                   variant="outline"
                   size="sm"
+                  title="Manage the project: team, edit its details, or delete it"
                   className={`h-8 text-xs ${t.btnOutline}`}
                 >
-                  <Users className="w-3.5 h-3.5 mr-1.5" />
-                  Team ({(project.memberIds ?? []).length})
+                  <Settings className="w-3.5 h-3.5 mr-1.5" />
+                  Manage ({(project.memberIds ?? []).length})
                 </Button>
                 <Button
                   onClick={() => setAddColumnOpen(true)}
