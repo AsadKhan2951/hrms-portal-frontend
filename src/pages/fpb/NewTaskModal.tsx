@@ -19,10 +19,13 @@ import { Avatar, type Priority } from "@/pages/fpb/shared";
  * dialog from the column header or the board toolbar — never its own page.
  */
 export function NewTaskModal({
-  open, onClose, projectId, columnId, projectTitle, members, users, tokens,
+  open, onClose, projectId, subprojectId, columnId, projectTitle, subprojectName,
+  members, users, tokens,
 }: {
-  open: boolean; onClose: () => void; projectId: string; columnId: string | null;
-  projectTitle: string; members: string[]; users: any[]; tokens: any;
+  open: boolean; onClose: () => void; projectId: string;
+  subprojectId: string | null; columnId: string | null;
+  projectTitle: string; subprojectName?: string;
+  members: string[]; users: any[]; tokens: any;
 }) {
   const utils = trpc.useUtils();
   const [title, setTitle] = useState("");
@@ -70,6 +73,7 @@ export function NewTaskModal({
     if (!title.trim()) return;
     create.mutate({
       projectId,
+      subprojectId: subprojectId || undefined,
       columnId: targetColumn || undefined,
       title: title.trim(),
       description: description.trim() || undefined,
@@ -85,7 +89,9 @@ export function NewTaskModal({
       <DialogContent className={`${tokens.dialog} max-w-lg max-h-[90vh] overflow-y-auto`}>
         <DialogHeader>
           <DialogTitle className="font-semibold">Create Task</DialogTitle>
-          <DialogDescription className={tokens.textMuted}>in {projectTitle}</DialogDescription>
+          <DialogDescription className={tokens.textMuted}>
+            in {projectTitle}{subprojectName ? ` · ${subprojectName}` : ""}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 mt-2">

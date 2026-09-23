@@ -3,8 +3,8 @@ import { Link } from "wouter";
 import { DragDropContext, Droppable, type DropResult } from "@hello-pangea/dnd";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Loader2, MoreHorizontal, Pencil, Plus, Search, Settings, Settings2,
-  Sun, Moon, Trash2, Users,
+  ArrowLeft, Check, ChevronDown, Layers, Loader2, MoreHorizontal, Pencil, Plus,
+  Search, Settings, Settings2, Sun, Moon, Trash2, Users,
 } from "lucide-react";
 
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -17,11 +17,13 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 import { TaskCard } from "@/pages/fpb/TaskCard";
 import { NewProjectModal } from "@/pages/fpb/NewProjectModal";
+import { NewSubprojectModal } from "@/pages/fpb/NewSubprojectModal";
 import { NewTaskModal } from "@/pages/fpb/NewTaskModal";
 import { TaskDetailModal } from "@/pages/fpb/TaskDetailModal";
 import { ProjectSettingsModal } from "@/pages/fpb/ProjectSettingsModal";
@@ -42,10 +44,13 @@ export default function FlowProjectBoard() {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [newSubprojectOpen, setNewSubprojectOpen] = useState(false);
   const [addColumnOpen, setAddColumnOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newTaskColumn, setNewTaskColumn] = useState<string | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  // Which sub-project's board is showing; null lets the server pick the first.
+  const [subId, setSubId] = useState<string | null>(null);
 
   const { data: projects = [], isLoading: projectsLoading } =
     trpc.fpb.getProjects.useQuery(filterType !== "all" ? { projectType: filterType } : undefined);
@@ -67,8 +72,12 @@ export default function FlowProjectBoard() {
     try { localStorage.setItem(SELECTED_KEY, activeId); } catch { /* private mode */ }
   }, [activeId]);
 
+  // Switching projects clears the sub-project choice, so the server falls back
+  // to the new project's first sub-project rather than one from the old board.
+  useEffect(() => { setSubId(null); }, [activeId]);
+
   const { data: board, isLoading: boardLoading } = trpc.fpb.getBoard.useQuery(
-    { projectId: activeId ?? "" },
+    { projectId: activeId ?? "", subprojectId: subId ?? undefined },
     { enabled: Boolean(activeId) }
   );
 
@@ -95,9 +104,27 @@ export default function FlowProjectBoard() {
     onError: (e: any) => { refreshBoard(); onError(e); },
   });
 
+  const deleteSubproject = trpc.fpb.deleteSubproject.useMutation({
+    onSuccess: (r: any) => {
+      setSubId(null); // fall back to the project's first sub-project
+      refreshBoard();
+      utils.fpb.getProjects.invalidate();
+      toast.success(
+        r?.deletedTasks > 0
+          ? `Sub-project deleted, along with ${r.deletedTasks} task${r.deletedTasks === 1 ? "" : "s"}.`
+          : "Sub-project deleted"
+      );
+    },
+    onError,
+  });
+
   const columns = (board?.columns ?? []) as any[];
   const tasks = (board?.tasks ?? []) as any[];
   const project = board?.project as any;
+  const subprojects = (board?.subprojects ?? []) as any[];
+  // The sub-project actually being shown, as resolved by the server.
+  const activeSubId = (board?.activeSubprojectId ?? null) as string | null;
+  const activeSub = subprojects.find(s => s.id === activeSubId);
 
   const tasksByColumn = useMemo(() => {
     const map = new Map<string, any[]>();
@@ -240,15 +267,38 @@ export default function FlowProjectBoard() {
       {/* ─────────────────────────────── Board */}
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className={`flex items-center justify-between px-6 py-4 border-b ${t.border} flex-shrink-0`}>
-          <div className="min-w-0">
-            <h1 className={`text-lg font-semibold truncate ${t.textPrimary}`}>
-              {project?.title ?? "Flow Project Board"}
-            </h1>
-            <p className={`text-xs mt-0.5 ${t.textMuted}`}>
-              {project
-                ? `${tasks.length} task${tasks.length === 1 ? "" : "s"} across ${columns.length} column${columns.length === 1 ? "" : "s"}`
-                : "Pick a project to see its board"}
-            </p>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="min-w-0">
+              <h1 className={`text-lg font-semibold truncate ${t.textPrimary}`}>
+                {project?.title ?? "Flow Project Board"}
+              </h1>
+              <p className={`text-xs mt-0.5 ${t.textMuted}`}>
+                {project
+                  ? `${tasks.length} task${tasks.length === 1 ? "" : "s"} across ${columns.length} column${columns.length === 1 ? "" : "s"}`
+                  : "Pick a project to see its board"}
+              </p>
+            </div>
+
+            {/* The sub-project switcher lives next to the project title: pick a
+                division of the project, or create a new one. */}
+            {project && (
+              <SubprojectSwitcher
+                subprojects={subprojects}
+                activeId={activeSubId}
+                onSelect={id => setSubId(id)}
+                onCreate={() => setNewSubprojectOpen(true)}
+                onDelete={sp => {
+                  if (
+                    confirm(
+                      `Delete the "${sp.name}" sub-project? All of its tasks will be removed. This cannot be undone.`
+                    )
+                  ) {
+                    deleteSubproject.mutate({ id: sp.id });
+                  }
+                }}
+                tokens={t}
+              />
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -398,10 +448,20 @@ export default function FlowProjectBoard() {
             open={newTaskColumn !== null}
             onClose={() => setNewTaskColumn(null)}
             projectId={activeId}
+            subprojectId={activeSubId}
             columnId={newTaskColumn}
             projectTitle={project?.title ?? ""}
+            subprojectName={activeSub?.name}
             members={project?.memberIds ?? []}
             users={users as any[]}
+            tokens={t}
+          />
+          <NewSubprojectModal
+            open={newSubprojectOpen}
+            onClose={() => setNewSubprojectOpen(false)}
+            projectId={activeId}
+            projectTitle={project?.title ?? ""}
+            onCreated={id => setSubId(id)}
             tokens={t}
           />
           <ProjectSettingsModal
@@ -426,6 +486,75 @@ export default function FlowProjectBoard() {
         tokens={t}
       />
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────── Sub-project switcher
+/**
+ * The control next to the project title for choosing which sub-project's board
+ * to show, and for creating a new one. A project (a brand, say) is divided into
+ * sub-projects — Social Media, Development, SEO, Marketing — each with its own
+ * cards on the shared columns.
+ */
+function SubprojectSwitcher({
+  subprojects, activeId, onSelect, onCreate, onDelete, tokens,
+}: {
+  subprojects: any[];
+  activeId: string | null;
+  onSelect: (id: string) => void;
+  onCreate: () => void;
+  onDelete: (sp: any) => void;
+  tokens: any;
+}) {
+  const active = subprojects.find(s => s.id === activeId);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className={`flex items-center gap-1.5 h-8 px-3 rounded-lg border text-xs font-medium ${tokens.btnOutline}`}
+          title="Switch sub-project, or create a new one"
+        >
+          <Layers className="w-3.5 h-3.5 flex-shrink-0" />
+          <span className="max-w-[160px] truncate">{active?.name ?? "Sub-project"}</span>
+          <ChevronDown className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className={`${tokens.selectContent} min-w-[220px]`}>
+        {subprojects.map(s => (
+          <DropdownMenuItem
+            key={s.id}
+            onClick={() => onSelect(s.id)}
+            className="cursor-pointer flex items-center justify-between gap-2 group"
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <Check className={`w-3.5 h-3.5 flex-shrink-0 ${s.id === activeId ? "opacity-100" : "opacity-0"}`} />
+              <span
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: s.color || "#6366f1" }}
+              />
+              <span className="truncate">{s.name}</span>
+            </span>
+            {subprojects.length > 1 && (
+              <button
+                onClick={e => { e.stopPropagation(); onDelete(s); }}
+                className="p-0.5 rounded opacity-0 group-hover:opacity-70 hover:!opacity-100 hover:text-red-500 flex-shrink-0"
+                title="Delete sub-project"
+                aria-label={`Delete ${s.name}`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </DropdownMenuItem>
+        ))}
+        {subprojects.length > 0 && <DropdownMenuSeparator />}
+        <DropdownMenuItem
+          onClick={onCreate}
+          className="cursor-pointer text-violet-500 focus:text-violet-500"
+        >
+          <Plus className="w-3.5 h-3.5 mr-2" /> New sub-project
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
