@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { GlobalChatWidget } from "@/components/GlobalChatWidget";
+import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import { useIsMobile } from "@/hooks/useMobile";
 import { toast } from "sonner";
 
@@ -214,6 +215,9 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
 
       {/* Global Chat Widget */}
       <GlobalChatWidget />
+
+      {/* Company announcements, shown once as a popup when new ones are posted */}
+      <AnnouncementPopup />
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto w-full">

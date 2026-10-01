@@ -35,6 +35,7 @@ import { useRealtime } from "@/_core/hooks/useRealtime";
 import { toast } from "sonner";
 import { GlobalChatWidget } from "./GlobalChatWidget";
 import { NotesWidget } from "./NotesWidget";
+import { AnnouncementPopup } from "./AnnouncementPopup";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -280,6 +281,9 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
       )}
 
       <NotesWidget />
+
+      {/* Company announcements, shown once as a popup when new ones are posted */}
+      <AnnouncementPopup />
     </div>
   );
 }
