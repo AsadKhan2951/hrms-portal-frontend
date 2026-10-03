@@ -217,7 +217,7 @@ export default function FlowProjectBoard() {
                 key={p.id}
                 onClick={() => setSelectedId(p.id)}
                 className={`w-full text-left rounded-lg px-2.5 py-2 transition-colors ${
-                  active ? "bg-violet-600/20 border border-violet-500/40" : `border border-transparent ${t.surfaceHover}`
+                  active ? "bg-[#4233e0]/20 border border-[#4233e0]/40" : `border border-transparent ${t.surfaceHover}`
                 }`}
               >
                 <div className={`flex items-center gap-1.5 mb-1 ${info.color}`}>
@@ -239,7 +239,7 @@ export default function FlowProjectBoard() {
                     {(p.memberIds ?? []).slice(0, 3).map((id: string) => (
                       <span
                         key={id}
-                        className="w-4 h-4 rounded-full bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center text-[8px] text-white font-bold"
+                        className="w-4 h-4 rounded-full bg-gradient-to-br from-[#4233e0] to-[#8f86ff] flex items-center justify-center text-[8px] text-white font-bold"
                       >
                         {initialOf((users as any[]).find(u => u.id === id))}
                       </span>
@@ -256,7 +256,7 @@ export default function FlowProjectBoard() {
             <Button
               onClick={() => setNewProjectOpen(true)}
               size="sm"
-              className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+              className="w-full bg-[#4233e0] hover:bg-[#2a1fb0] text-white"
             >
               <Plus className="w-3.5 h-3.5 mr-1.5" /> New Project
             </Button>
@@ -333,7 +333,7 @@ export default function FlowProjectBoard() {
                   onClick={() => columns.length > 0 && setNewTaskColumn(columns[0].id)}
                   size="sm"
                   disabled={columns.length === 0}
-                  className="bg-violet-600 hover:bg-violet-700 text-white h-8 text-xs"
+                  className="bg-[#4233e0] hover:bg-[#2a1fb0] text-white h-8 text-xs"
                 >
                   <Plus className="w-3.5 h-3.5 mr-1.5" /> New Task
                 </Button>
@@ -549,7 +549,7 @@ function SubprojectSwitcher({
         {subprojects.length > 0 && <DropdownMenuSeparator />}
         <DropdownMenuItem
           onClick={onCreate}
-          className="cursor-pointer text-violet-500 focus:text-violet-500"
+          className="cursor-pointer text-[#4233e0] focus:text-[#4233e0]"
         >
           <Plus className="w-3.5 h-3.5 mr-2" /> New sub-project
         </DropdownMenuItem>

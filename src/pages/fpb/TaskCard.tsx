@@ -27,8 +27,8 @@ export function TaskCard({
           onClick={onOpen}
           className={`group border rounded-lg p-3 mb-2 cursor-pointer transition-all select-none ${tokens.card} ${
             snapshot.isDragging
-              ? "border-violet-500/60 shadow-lg shadow-violet-500/10 rotate-1"
-              : `${tokens.border} hover:border-violet-400/50`
+              ? "border-[#4233e0]/60 shadow-lg shadow-[#4233e0]/10 rotate-1"
+              : `${tokens.border} hover:border-[#8f86ff]/50`
           }`}
         >
           <p className={`text-sm leading-snug mb-2 ${
@@ -70,8 +70,8 @@ export function TaskCard({
               {assignee && (
                 <span
                   title={assignee.name}
-                  className={`w-5 h-5 rounded-full bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center text-[9px] text-white font-bold border ${
-                    theme === "dark" ? "border-[#0f0f13]" : "border-white"
+                  className={`w-5 h-5 rounded-full bg-gradient-to-br from-[#4233e0] to-[#8f86ff] flex items-center justify-center text-[9px] text-white font-bold border ${
+                    theme === "dark" ? "border-[#171c15]" : "border-white"
                   }`}
                 >
                   {initialOf(assignee)}
@@ -84,7 +84,7 @@ export function TaskCard({
                     key={id}
                     title={u?.name}
                     className={`w-5 h-5 rounded-full bg-slate-500/60 flex items-center justify-center text-[9px] text-white font-bold border ${
-                      theme === "dark" ? "border-[#0f0f13]" : "border-white"
+                      theme === "dark" ? "border-[#171c15]" : "border-white"
                     }`}
                   >
                     {initialOf(u)}

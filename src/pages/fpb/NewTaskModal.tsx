@@ -199,7 +199,7 @@ export function NewTaskModal({
             <Button
               onClick={submit}
               disabled={!title.trim() || create.isPending}
-              className="bg-violet-600 hover:bg-violet-700 text-white"
+              className="bg-[#4233e0] hover:bg-[#2a1fb0] text-white"
             >
               {create.isPending
                 ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</>

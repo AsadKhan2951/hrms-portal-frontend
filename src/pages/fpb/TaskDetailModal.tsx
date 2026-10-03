@@ -103,7 +103,7 @@ export function TaskDetailModal({
                   aria-label={task.completed ? "Mark as not done" : "Mark as done"}
                   onClick={() => updateTask.mutate({ id: task.id, completed: !task.completed })}
                   className={`mt-1.5 w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
-                    task.completed ? "bg-emerald-500 border-emerald-500" : `${tokens.border} hover:border-violet-400`
+                    task.completed ? "bg-emerald-500 border-emerald-500" : `${tokens.border} hover:border-[#8f86ff]`
                   }`}
                 >
                   {task.completed && <Check className="w-2.5 h-2.5 text-white" />}
@@ -311,7 +311,7 @@ export function TaskDetailModal({
                     size="sm"
                     disabled={!commentText.trim() || addComment.isPending}
                     onClick={() => addComment.mutate({ taskId: task.id, comment: commentText.trim() })}
-                    className="h-8 bg-violet-600 hover:bg-violet-700 text-white text-xs"
+                    className="h-8 bg-[#4233e0] hover:bg-[#2a1fb0] text-white text-xs"
                   >
                     Send
                   </Button>

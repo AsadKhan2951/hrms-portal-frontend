@@ -123,7 +123,7 @@ export default function Payslips() {
                         </p>
                       </div>
 
-                      <Badge variant="default" className="capitalize">
+                      <Badge variant={payslip.paidAt ? "default" : "secondary"} className="capitalize">
                         {payslip.paidAt ? "paid" : "pending"}
                       </Badge>
 

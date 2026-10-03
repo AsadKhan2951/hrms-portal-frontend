@@ -159,8 +159,8 @@ export function ProjectSettingsModal({
                         disabled={updateMembers.isPending}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border transition-all disabled:opacity-50 ${
                           on
-                            ? "bg-violet-600/30 border-violet-500 text-violet-200"
-                            : `${tokens.tagBg} ${tokens.border} ${tokens.textSecondary} hover:border-violet-400`
+                            ? "bg-[#4233e0]/30 border-[#4233e0] text-[#c9c4ff]"
+                            : `${tokens.tagBg} ${tokens.border} ${tokens.textSecondary} hover:border-[#8f86ff]`
                         }`}
                       >
                         <Avatar user={u} size={18} />
@@ -229,7 +229,7 @@ export function ProjectSettingsModal({
                     size="sm"
                     onClick={saveDetails}
                     disabled={!dirty || updateProject.isPending}
-                    className="bg-violet-600 hover:bg-violet-700 text-white"
+                    className="bg-[#4233e0] hover:bg-[#2a1fb0] text-white"
                   >
                     {updateProject.isPending
                       ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Saving...</>

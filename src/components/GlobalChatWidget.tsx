@@ -77,7 +77,7 @@ export function GlobalChatWidget({ open, onOpenChange, hideTrigger }: GlobalChat
       {!hideTrigger && (
         <Button
           onClick={() => setIsOpen(!isOpen)}
-          className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-premium-lg bg-[#ff2801] hover:bg-[#e62401] text-white"
+          className="fixed bottom-6 max-[900px]:bottom-24 right-6 z-40 h-14 w-14 rounded-full shadow-premium-lg bg-[#4233e0] hover:bg-[#2a1fb0] text-white"
           size="icon"
         >
           {isOpen ? <X className="h-6 w-6" /> : <MessageSquare className="h-6 w-6" />}
@@ -86,9 +86,9 @@ export function GlobalChatWidget({ open, onOpenChange, hideTrigger }: GlobalChat
 
       {/* Chat Window */}
       {isOpen && (
-        <Card className="fixed bottom-24 right-6 z-50 w-96 h-[500px] shadow-premium-lg flex flex-col">
+        <Card className="fixed bottom-24 max-[900px]:bottom-40 right-6 z-40 w-96 h-[500px] shadow-premium-lg flex flex-col">
           {/* Header */}
-          <div className="p-4 border-b bg-[#ff2801] text-white rounded-t-lg flex items-center justify-between gap-3">
+          <div className="p-4 border-b bg-[#4233e0] text-white rounded-t-lg flex items-center justify-between gap-3">
             <h3 className="font-semibold flex items-center gap-2">
               <MessageSquare className="h-5 w-5" />
               {selectedUserName ? `Chat with ${selectedUserName}` : "Team Chat"}
@@ -138,7 +138,7 @@ export function GlobalChatWidget({ open, onOpenChange, hideTrigger }: GlobalChat
                   <div
                     className={`max-w-[80%] rounded-lg p-3 ${
                       String(msg.senderId) === String(user?.id)
-                        ? "bg-[#ff2801] text-white"
+                        ? "bg-[#4233e0] text-white"
                         : "bg-muted"
                     }`}
                   >
@@ -174,7 +174,7 @@ export function GlobalChatWidget({ open, onOpenChange, hideTrigger }: GlobalChat
                 size="icon"
                 onClick={handleSend}
                 disabled={!message.trim()}
-                className="bg-[#ff2801] hover:bg-[#e62401]"
+                className="bg-[#4233e0] hover:bg-[#2a1fb0] text-white"
               >
                 <Send className="h-4 w-4" />
               </Button>

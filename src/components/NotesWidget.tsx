@@ -199,7 +199,7 @@ export function NotesWidget({ open, onOpenChange, hideTrigger }: NotesWidgetProp
       {!hideTrigger && (
         <Button
           onClick={() => setIsOpen(!isOpen)}
-          className="fixed bottom-24 right-6 z-50 h-12 w-12 rounded-full shadow-premium-lg bg-[#ff8a00] hover:bg-[#ff7a00] text-white"
+          className="fixed bottom-24 max-[900px]:bottom-40 right-6 z-40 h-12 w-12 rounded-full shadow-premium-lg bg-[#10140f] hover:bg-[#1c221a] text-[#c8f169]"
           size="icon"
         >
           {isOpen ? <X className="h-5 w-5" /> : <StickyNote className="h-5 w-5" />}
@@ -213,7 +213,7 @@ export function NotesWidget({ open, onOpenChange, hideTrigger }: NotesWidgetProp
               <div className="p-4 border-b border-border/60">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <StickyNote className="h-5 w-5 text-[#ff8a00]" />
+                    <StickyNote className="h-5 w-5 text-primary" />
                     <h3 className="font-semibold text-base">Notes</h3>
                   </div>
                   <div className="flex items-center gap-2">
@@ -261,7 +261,7 @@ export function NotesWidget({ open, onOpenChange, hideTrigger }: NotesWidgetProp
                         key={note.id}
                         className={`rounded-xl border p-3 transition-colors ${
                           isActive
-                            ? "border-[#ff8a00]/70 bg-[#ff8a00]/10"
+                            ? "border-primary/70 bg-primary/10"
                             : "border-border/50 hover:bg-muted/40"
                         }`}
                       >

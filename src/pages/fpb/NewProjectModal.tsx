@@ -225,8 +225,8 @@ export function NewProjectModal({
                     }
                     className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-all ${
                       on
-                        ? "bg-violet-600/30 border-violet-500 text-violet-200"
-                        : `${tokens.tagBg} ${tokens.border} ${tokens.textSecondary} hover:border-violet-400`
+                        ? "bg-[#4233e0]/30 border-[#4233e0] text-[#c9c4ff]"
+                        : `${tokens.tagBg} ${tokens.border} ${tokens.textSecondary} hover:border-[#8f86ff]`
                     }`}
                   >
                     <Avatar user={u} size={16} />
@@ -245,7 +245,7 @@ export function NewProjectModal({
             <Button
               onClick={submit}
               disabled={!title.trim() || create.isPending}
-              className="bg-violet-600 hover:bg-violet-700 text-white"
+              className="bg-[#4233e0] hover:bg-[#2a1fb0] text-white"
             >
               {create.isPending
                 ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</>

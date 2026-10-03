@@ -15,7 +15,7 @@ export type Priority = "low" | "medium" | "high" | "urgent";
 export const PROJECT_TYPES: {
   value: ProjectType; label: string; short: string; icon: React.ReactNode; color: string;
 }[] = [
-  { value: "dev", label: "Development / Design / Software", short: "Development", icon: <Code2 className="w-4 h-4" />, color: "text-violet-400" },
+  { value: "dev", label: "Development / Design / Software", short: "Development", icon: <Code2 className="w-4 h-4" />, color: "text-[#8f86ff]" },
   { value: "lead", label: "Lead & New Business", short: "Lead", icon: <Briefcase className="w-4 h-4" />, color: "text-blue-400" },
   { value: "management", label: "Management / Ideas", short: "Management", icon: <Lightbulb className="w-4 h-4" />, color: "text-amber-400" },
   { value: "accounting", label: "Accounting", short: "Accounting", icon: <DollarSign className="w-4 h-4" />, color: "text-emerald-400" },
@@ -60,7 +60,7 @@ export function Avatar({ user, size = 20 }: { user: any; size?: number }) {
     <span
       title={user?.name}
       style={{ width: size, height: size, fontSize: size * 0.42 }}
-      className="rounded-full bg-gradient-to-br from-violet-500 to-blue-500 inline-flex items-center justify-center text-white font-bold flex-shrink-0"
+      className="rounded-full bg-gradient-to-br from-[#4233e0] to-[#8f86ff] inline-flex items-center justify-center text-white font-bold flex-shrink-0"
     >
       {initialOf(user)}
     </span>

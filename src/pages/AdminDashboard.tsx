@@ -214,33 +214,33 @@ export default function AdminDashboard() {
     <AdminLayout title="Admin Dashboard">
       <div className="space-y-6">
         {/* Greeting */}
-        <Card className="p-6 border border-[#3a1c12] bg-gradient-to-r from-[#2b120e] via-[#1b1514] to-[#141414] shadow-[0_0_0_1px_rgba(255,90,50,0.18)]">
+        <Card className="p-6 bg-[#10140f] text-white">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="space-y-2">
               <h2 className="text-xl font-semibold">
-                Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {user?.name || "Admin"}! ??
+                Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {user?.name || "Admin"}!
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-white/70">
                 Here's what's happening with your team today
               </p>
-              <div className="flex flex-wrap gap-6 text-sm text-muted-foreground">
+              <div className="flex flex-wrap gap-6 text-sm text-white/70">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  <span><strong className="text-foreground">{workingNowCount}</strong> employees currently working</span>
+                  <span><strong className="text-white">{workingNowCount}</strong> employees currently working</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 text-orange-400" />
-                  <span><strong className="text-foreground">{pendingLeaves.length}</strong> pending leave requests</span>
+                  <span><strong className="text-white">{pendingLeaves.length}</strong> pending leave requests</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <MessageSquareText className="h-4 w-4 text-sky-400" />
-                  <span><strong className="text-foreground">{pendingForms.length}</strong> pending form responses</span>
+                  <span><strong className="text-white">{pendingForms.length}</strong> pending form responses</span>
                 </div>
               </div>
             </div>
             <Button
               variant="outline"
-              className="self-start md:self-auto border-white/10"
+              className="self-start md:self-auto border-0 bg-[#c8f169] text-[#10140f] hover:bg-[#b9e455] hover:text-[#10140f]"
               onClick={refreshAll}
             >
               <RefreshCcw className="mr-2 h-4 w-4" />
@@ -251,28 +251,28 @@ export default function AdminDashboard() {
 
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="p-4 rounded-2xl bg-[#141414] border border-white/5">
+          <Card className="p-4 rounded-2xl">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
               <Users className="h-4 w-4 text-green-500" />
               Online Now
             </div>
             <div className="text-2xl font-bold">{workingNowCount}/{totalEmployeesCount}</div>
           </Card>
-          <Card className="p-4 rounded-2xl bg-[#141414] border border-white/5">
+          <Card className="p-4 rounded-2xl">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
               <Award className="h-4 w-4 text-yellow-500" />
               Most Punctual
             </div>
             <div className="text-base font-semibold truncate">{mostPunctual}</div>
           </Card>
-          <Card className="p-4 rounded-2xl bg-[#141414] border border-white/5">
+          <Card className="p-4 rounded-2xl">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
               <Briefcase className="h-4 w-4 text-blue-500" />
               Active Projects
             </div>
             <div className="text-2xl font-bold">{activeProjects.length}</div>
           </Card>
-          <Card className="p-4 rounded-2xl bg-[#141414] border border-white/5">
+          <Card className="p-4 rounded-2xl">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
               <ListTodo className="h-4 w-4 text-purple-500" />
               Ongoing Tasks
@@ -282,7 +282,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Key Metrics */}
-        <Card className="p-6 rounded-2xl bg-[#141414] border border-white/5">
+        <Card className="p-6 rounded-2xl">
           <h3 className="font-semibold mb-4">Key Metrics</h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div>
@@ -322,7 +322,7 @@ export default function AdminDashboard() {
 
         {/* Currently Online + Notifications */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="p-6 lg:col-span-2 rounded-2xl bg-[#141414] border border-white/5">
+          <Card className="p-6 lg:col-span-2 rounded-2xl">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold">Currently Online</h3>
@@ -399,7 +399,7 @@ export default function AdminDashboard() {
             </div>
           </Card>
 
-          <Card className="p-6 rounded-2xl bg-[#141414] border border-white/5">
+          <Card className="p-6 rounded-2xl">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Bell className="h-4 w-4 text-orange-400" />
@@ -418,7 +418,7 @@ export default function AdminDashboard() {
             ) : (
               <div className="space-y-3">
                 {notifications.slice(0, 4).map((notif: any) => (
-                  <div key={notif.id} className="rounded-xl border border-white/5 bg-[#191919] p-3">
+                  <div key={notif.id} className="rounded-xl bg-muted/60 p-3">
                     <p className="text-sm font-medium">{notif.title || "Notification"}</p>
                     <p className="text-xs text-muted-foreground">{notif.message}</p>
                     <p className="text-xs text-muted-foreground">
@@ -435,7 +435,7 @@ export default function AdminDashboard() {
 
         {/* Pending Leaves + Average Hours */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="p-6 rounded-2xl bg-[#141414] border border-white/5">
+          <Card className="p-6 rounded-2xl">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold">Pending Leaves</h3>
               <Badge variant="secondary" className="text-xs">{pendingLeaves.length}</Badge>
@@ -462,7 +462,7 @@ export default function AdminDashboard() {
             </div>
           </Card>
 
-          <Card className="p-6 lg:col-span-2 rounded-2xl bg-[#141414] border border-white/5">
+          <Card className="p-6 lg:col-span-2 rounded-2xl">
             <h3 className="font-semibold mb-4">Employee Average Hours (This Week)</h3>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={avgHoursData}>
@@ -478,14 +478,14 @@ export default function AdminDashboard() {
 
         {/* Ongoing Projects + Ongoing Tasks */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="p-6 rounded-2xl bg-[#141414] border border-white/5">
+          <Card className="p-6 rounded-2xl">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold">Pending Forms</h3>
               <Badge variant="secondary" className="text-xs">{pendingForms.length}</Badge>
             </div>
             <div className="space-y-3">
               {pendingForms.map((form: any) => (
-                <div key={form.id} className="p-3 rounded-xl border border-white/5 bg-[#191919]">
+                <div key={form.id} className="p-3 rounded-xl bg-muted/60">
                   <p className="text-sm font-medium">{form.user?.name || "Employee"}</p>
                   <p className="text-xs text-muted-foreground">{form.subject || form.formType}</p>
                   <p className="text-xs text-muted-foreground">
@@ -506,11 +506,11 @@ export default function AdminDashboard() {
             </Link>
           </Card>
 
-          <Card className="p-6 rounded-2xl bg-[#141414] border border-white/5">
+          <Card className="p-6 rounded-2xl">
             <h3 className="font-semibold mb-4">Ongoing Projects</h3>
             <div className="space-y-4">
               {activeProjects.map((project: any) => (
-                <div key={project.id} className="p-3 rounded-xl border border-white/5 bg-[#191919]">
+                <div key={project.id} className="p-3 rounded-xl bg-muted/60">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm font-medium">{project.name}</p>
                     <span className="text-xs font-semibold">{project.progress || 0}%</span>
@@ -530,11 +530,11 @@ export default function AdminDashboard() {
             </div>
           </Card>
 
-          <Card className="p-6 rounded-2xl bg-[#141414] border border-white/5">
+          <Card className="p-6 rounded-2xl">
             <h3 className="font-semibold mb-4">Ongoing Tasks</h3>
             <div className="space-y-3">
               {ongoingTasks.map((task: any) => (
-                <div key={task.id} className="p-3 rounded-xl border border-white/5 bg-[#191919]">
+                <div key={task.id} className="p-3 rounded-xl bg-muted/60">
                   <div className="flex items-start justify-between mb-2">
                     <p className="text-sm font-medium">{task.title}</p>
                     <Badge
@@ -558,7 +558,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Resource Performance */}
-        <Card className="p-6 rounded-2xl bg-[#141414] border border-white/5">
+        <Card className="p-6 rounded-2xl">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold">Resource Performance</h3>
             <span className="text-xs text-muted-foreground">
@@ -600,7 +600,7 @@ export default function AdminDashboard() {
         </Card>
 
         {/* Advanced Reports */}
-        <Card className="p-4 rounded-2xl bg-[#141414] border border-white/5">
+        <Card className="p-4 rounded-2xl">
           <h3 className="font-semibold mb-4">Advanced Reports</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Link href="/admin/reports">

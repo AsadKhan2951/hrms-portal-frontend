@@ -38,8 +38,8 @@ export function useFPBTheme() {
   const dark = theme === "dark";
 
   const t = {
-    bg: dark ? "bg-[#0a0a0f]" : "bg-[#f4f5f7]",
-    card: dark ? "bg-[#0f0f13]" : "bg-white",
+    bg: dark ? "bg-[#0b0e0a]" : "bg-[#f5f6f3]",
+    card: dark ? "bg-[#171c15]" : "bg-white",
     cardHover: dark ? "hover:bg-white/[0.04]" : "hover:bg-slate-50",
     surface: dark ? "bg-white/[0.02]" : "bg-slate-100/80",
     surfaceHover: dark ? "hover:bg-white/[0.04]" : "hover:bg-slate-200/60",
@@ -56,10 +56,10 @@ export function useFPBTheme() {
       ? "bg-white/5 border-white/10 text-white"
       : "bg-white border-slate-200 text-slate-900",
     selectContent: dark
-      ? "bg-[#1a1a24] border-white/10 text-white"
+      ? "bg-[#1c221a] border-white/10 text-white"
       : "bg-white border-slate-200 text-slate-900",
     dialog: dark
-      ? "bg-[#0f0f13] border-white/10 text-white"
+      ? "bg-[#171c15] border-white/10 text-white"
       : "bg-white border-slate-200 text-slate-900",
     btnGhost: dark
       ? "hover:bg-white/10 text-slate-400 hover:text-white"
@@ -68,12 +68,12 @@ export function useFPBTheme() {
       ? "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white"
       : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900",
     dragOver: dark
-      ? "bg-violet-500/5 border border-violet-500/20"
-      : "bg-violet-50 border border-violet-200",
+      ? "bg-[#4233e0]/5 border border-[#4233e0]/20"
+      : "bg-[#eeedff] border border-[#c9c4ff]",
     divider: dark ? "bg-white/10" : "bg-slate-200",
     tagBg: dark ? "bg-white/10" : "bg-slate-100",
     emptyIcon: dark ? "text-slate-600" : "text-slate-400",
-    canvasBg: dark ? "#0f0f13" : "#f8fafc",
+    canvasBg: dark ? "#171c15" : "#f5f6f3",
     canvasText: dark ? "#94a3b8" : "#64748b",
   };
 

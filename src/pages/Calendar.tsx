@@ -120,7 +120,7 @@ export default function Calendar() {
 
   const eventStyleGetter = (event: CalendarEvent) => {
     let backgroundColor = "#3174ad";
-    if (event.type === "meeting") backgroundColor = "#ff2801";
+    if (event.type === "meeting") backgroundColor = "#4233e0";
     if (event.type === "deadline") backgroundColor = "#f59e0b";
     if (event.type === "event") backgroundColor = "#10b981";
 

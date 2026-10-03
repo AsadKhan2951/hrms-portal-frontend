@@ -78,7 +78,7 @@ export function NewSubprojectModal({
                   aria-label={`Colour ${c}`}
                   style={{ backgroundColor: c }}
                   className={`w-6 h-6 rounded-full transition-transform ${
-                    color === c ? "ring-2 ring-offset-2 ring-violet-500 ring-offset-transparent scale-110" : ""
+                    color === c ? "ring-2 ring-offset-2 ring-[#4233e0] ring-offset-transparent scale-110" : ""
                   }`}
                 />
               ))}
@@ -92,7 +92,7 @@ export function NewSubprojectModal({
             <Button
               onClick={submit}
               disabled={!name.trim() || create.isPending}
-              className="bg-violet-600 hover:bg-violet-700 text-white"
+              className="bg-[#4233e0] hover:bg-[#2a1fb0] text-white"
             >
               {create.isPending
                 ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</>

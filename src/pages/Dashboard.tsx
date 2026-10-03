@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { trpc } from "@/lib/trpc";
-import { isAnyHead } from "@/lib/roles";
+import { isAnyHead, roleLabel } from "@/lib/roles";
 import { TimeInOutDialog } from "@/components/TimeInOutDialog";
 import { getAvatarById } from "@shared/avatars";
 import {
@@ -43,11 +43,13 @@ import {
   StickyNote,
   LifeBuoy,
   LayoutGrid,
+  Check,
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { addHours, format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfDay, subDays } from "date-fns";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
+import NowShell, { type NowNavItem } from "@/components/NowShell";
 import { GlobalChatWidget } from "@/components/GlobalChatWidget";
 import { NotesWidget } from "@/components/NotesWidget";
 import { NotificationSidebar } from "@/components/NotificationSidebar";
@@ -485,6 +487,137 @@ export default function Dashboard() {
   const minOvertimeDate = format(subDays(new Date(), 1), "yyyy-MM-dd");
   const maxOvertimeDate = format(new Date(), "yyyy-MM-dd");
 
+  // ---- Data for the Now home layout ----
+  const { data: myTasks = [] } = trpc.projects.getMyTasks.useQuery();
+  const { data: myLeaves = [] } = trpc.leaves.getMyLeaves.useQuery();
+  const { data: announcements = [] } = trpc.dashboard.getAnnouncements.useQuery();
+  const { data: unreadNotifications = 0 } = trpc.notifications.getUnreadCount.useQuery();
+  const { data: myMeetings = [] } = trpc.meetings.getMyMeetings.useQuery();
+  const updateTaskMutation = trpc.projects.updateTask.useMutation({
+    onSuccess: () => {
+      utils.projects.getMyTasks.invalidate();
+      utils.projects.getMyTaskStats.invalidate();
+    },
+    onError: (error: any) => toast.error(error?.message || "Could not update the task"),
+  });
+
+  const hourNow = currentTime.getHours();
+  const firstName = (user?.name || "").trim().split(/\s+/)[0] || "there";
+  const todayStartMs = startOfDay(currentTime).getTime();
+
+  // Open tasks first (late ones on top), then what was finished today.
+  const dashboardTasks = useMemo(() => {
+    const dueMs = (task: any) =>
+      task.completionDate ? new Date(task.completionDate).getTime() : Number.MAX_SAFE_INTEGER;
+    const open = (myTasks as any[])
+      .filter(task => task.status !== "completed")
+      .sort((x, y) => dueMs(x) - dueMs(y));
+    const doneToday = (myTasks as any[]).filter(
+      task =>
+        task.status === "completed" &&
+        task.completedAt &&
+        new Date(task.completedAt).getTime() >= todayStartMs
+    );
+    return [...open, ...doneToday].slice(0, 8);
+  }, [myTasks, todayStartMs]);
+  const doneTaskCount = dashboardTasks.filter((task: any) => task.status === "completed").length;
+
+  // Per project: how many of this person's tasks are done, and how many are late.
+  const projectHealth = useMemo(() => {
+    const map = new Map<string, { total: number; done: number; late: number }>();
+    (myTasks as any[]).forEach(task => {
+      const projectId = String(task.project?.id ?? task.projectId ?? "");
+      if (!projectId) return;
+      const entry = map.get(projectId) ?? { total: 0, done: 0, late: 0 };
+      entry.total += 1;
+      if (task.status === "completed") entry.done += 1;
+      else if (task.completionDate && new Date(task.completionDate).getTime() < todayStartMs) entry.late += 1;
+      map.set(projectId, entry);
+    });
+    return map;
+  }, [myTasks, todayStartMs]);
+
+  // Approved leave days taken this calendar year, by type.
+  const leaveSummary = useMemo(() => {
+    const year = currentTime.getFullYear();
+    const totals: Record<string, number> = { annual: 0, casual: 0, sick: 0 };
+    (myLeaves as any[]).forEach(leave => {
+      if (leave.status !== "approved") return;
+      const start = new Date(leave.startDate);
+      const end = new Date(leave.endDate);
+      if (start.getFullYear() !== year) return;
+      const days = Math.max(1, Math.round((startOfDay(end).getTime() - startOfDay(start).getTime()) / 86400000) + 1);
+      totals[leave.leaveType] = (totals[leave.leaveType] ?? 0) + days;
+    });
+    return Object.entries(totals).map(([type, days]) => ({ type, days }));
+  }, [myLeaves, currentTime.getFullYear()]);
+  const pendingLeaveCount = (myLeaves as any[]).filter(leave => leave.status === "pending").length;
+
+  const latestAnnouncement: any = (announcements as any[])[0] ?? null;
+
+  const elapsedLabel = useMemo(() => {
+    if (!activeEntry) return "00:00:00";
+    const seconds = Math.max(0, Math.floor((currentTime.getTime() - new Date(activeEntry.timeIn).getTime()) / 1000));
+    const two = (n: number) => String(n).padStart(2, "0");
+    return `${two(Math.floor(seconds / 3600))}:${two(Math.floor(seconds / 60) % 60)}:${two(seconds % 60)}`;
+  }, [activeEntry, currentTime]);
+
+  // The brief: only things that are true right now, each with one action.
+  const lateTaskCount = (myTasks as any[]).filter(
+    task => task.status !== "completed" && task.completionDate && new Date(task.completionDate).getTime() < todayStartMs
+  ).length;
+  const openTaskCount = (myTasks as any[]).filter(task => task.status !== "completed").length;
+  const meetingsLeftToday = (myMeetings as any[]).filter(meeting => {
+    const start = new Date(meeting.startTime).getTime();
+    return start >= currentTime.getTime() && start < todayStartMs + 86400000 && meeting.status !== "cancelled";
+  }).length;
+  const briefItems: { key: string; title: string; detail: string; action: string; href?: string; onClick?: () => void }[] = [];
+  if (!activeEntry) {
+    briefItems.push({
+      key: "clock",
+      title: "You haven't clocked in yet",
+      detail: "Start your day so your hours count.",
+      action: "Clock in",
+      onClick: () => setTimeDialogOpen(true),
+    });
+  }
+  if (weeklyHoursSummary.missingCount > 0) {
+    briefItems.push({
+      key: "missing",
+      title: `${weeklyHoursSummary.missingCount} missed clock-out${weeklyHoursSummary.missingCount > 1 ? "s" : ""} this week`,
+      detail: `It is costing you ${weeklyHoursSummary.missingPenalty}h on your weekly total.`,
+      action: "Review",
+      href: "/attendance",
+    });
+  }
+  if (lateTaskCount > 0) {
+    briefItems.push({
+      key: "late",
+      title: `${lateTaskCount} task${lateTaskCount > 1 ? "s are" : " is"} past the due date`,
+      detail: `${openTaskCount} open in total.`,
+      action: "Open tasks",
+      href: "/projects",
+    });
+  }
+  if (meetingsLeftToday > 0) {
+    briefItems.push({
+      key: "meetings",
+      title: `${meetingsLeftToday} meeting${meetingsLeftToday > 1 ? "s" : ""} left today`,
+      detail: "See times and links on your calendar.",
+      action: "Calendar",
+      href: "/calendar",
+    });
+  }
+  if (unreadChatCount > 0) {
+    briefItems.push({
+      key: "chat",
+      title: `${unreadChatCount} unread message${unreadChatCount > 1 ? "s" : ""}`,
+      detail: "Someone is waiting on a reply.",
+      action: "Open chat",
+      href: "/chat",
+    });
+  }
+
   const menuItems = [
     { icon: Home, label: "Flow Central", path: "/dashboard" },
     { icon: Clock, label: "Attendance", path: "/attendance" },
@@ -500,567 +633,415 @@ export default function Dashboard() {
     ...(isAnyHead(user?.role) ? [{ icon: Shield, label: "Admin Panel", path: "/admin" }] : []),
   ];
 
-  const filteredMenuItems = menuItems.filter(item =>
-    item.label.toLowerCase().includes(searchQuery.toLowerCase())
+  const navItems: NowNavItem[] = menuItems.map(item =>
+    item.path === "/chat" ? { ...item, count: unreadChatCount } : item
   );
 
-  const logoClassName = theme === "dark"
-    ? "h-8 w-auto object-contain"
-    : "h-8 w-auto object-contain invert";
-
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      {/* Mobile Sidebar Overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <aside
-        className={`${
-          sidebarCollapsed ? "w-20" : "w-64"
-        } bg-card border-r transition-all duration-300 flex flex-col fixed lg:relative inset-y-0 left-0 z-50 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
-        onMouseEnter={() => {
-          if (!isMobile) setSidebarCollapsed(false);
-        }}
-        onMouseLeave={() => {
-          if (!isMobile) setSidebarCollapsed(true);
-        }}
-      >
-        {/* Logo & Toggle */}
-        <div className="p-4 border-b flex items-center justify-between">
-          {!sidebarCollapsed && (
-            <img
-              src="/new-logo-v2.png"
-              alt="Now HRMS"
-              className={logoClassName}
-              style={{ width: "115px", height: "61px" }}
-            />
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          >
-            {sidebarCollapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
-          </Button>
-        </div>
-
-        {/* Search */}
-        {!sidebarCollapsed && (
-          <div className="p-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
+    <NowShell
+      items={navItems}
+      tabPaths={["/dashboard", "/board", "/attendance", "/chat"]}
+      user={user}
+      roleLabel={roleLabel(user?.role)}
+      onLogout={handleLogout}
+    >
+        <div>
+          {/* Greeting + quick actions */}
+          <header className="now-page-header">
+            <div>
+              <h1 className="now-page-title">
+                {hourNow < 12 ? "Good morning" : hourNow < 18 ? "Good afternoon" : "Good evening"}, {firstName}.
+              </h1>
+              <div className="now-page-sub">{format(currentTime, "EEEE, d MMMM yyyy")}</div>
             </div>
-          </div>
-        )}
-
-        {/* Navigation */}
-        <nav className="flex-1 p-2 overflow-y-auto">
-          <div className="space-y-1">
-            {filteredMenuItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location === item.path;
-              
-              return (
-                <Link key={item.path} href={item.path}>
-                  <Button
-                    variant={isActive ? "secondary" : "ghost"}
-                    className={`relative w-full ${sidebarCollapsed ? "justify-center" : "justify-start"}`}
-                  >
-                    <Icon className="h-5 w-5" />
-                    {!sidebarCollapsed && (
-                      <>
-                        <span className="ml-3 flex-1 text-left">{item.label}</span>
-                        {item.path === "/chat" && unreadChatCount > 0 && (
-                          <span className="min-w-[20px] px-2 py-0.5 text-xs rounded-full bg-red-500 text-white text-center">
-                            {unreadChatCount}
-                          </span>
-                        )}
-                      </>
-                    )}
-                    {sidebarCollapsed && item.path === "/chat" && unreadChatCount > 0 && (
-                      <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />
-                    )}
-                  </Button>
-                </Link>
-              );
-            })}
-          </div>
-        </nav>
-
-        {/* Logout */}
-        <div className="p-2 border-t">
-          <Button
-            variant="ghost"
-            onClick={handleLogout}
-            className={`w-full ${sidebarCollapsed ? "justify-center" : "justify-start"} text-red-500 hover:text-red-600 hover:bg-red-500/10`}
-          >
-            <LogOut className="h-5 w-5" />
-            {!sidebarCollapsed && <span className="ml-3">Logout</span>}
-          </Button>
-        </div>
-      </aside>
-
-       {/* Main Content */}
-      <main className="flex-1 overflow-auto w-full">
-        {/* Mobile Header */}
-        <div className="lg:hidden sticky top-0 z-30 bg-card border-b p-4 flex items-center justify-between">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-          >
-            {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
-          <img
-            src="/new-logo-v2.png"
-            alt="Now HRMS"
-            className={logoClassName}
-            style={{ width: "115px", height: "61px" }}
-          />
-          <div className="flex items-center gap-1">
-            <Link href="/notifications">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="relative"
+            <div className="now-header-actions">
+              <button type="button" className="now-icon-btn" title="Today's Schedule" aria-label="Today's schedule" onClick={() => setCalendarSidebarOpen(true)}>
+                <Calendar className="h-[18px] w-[18px]" />
+              </button>
+              <button type="button" className="now-icon-btn" title="Quick Meeting" aria-label="Quick meeting" onClick={() => setMeetingSidebarOpen(true)}>
+                <Users className="h-[18px] w-[18px]" />
+              </button>
+              <button
+                type="button"
+                className="now-icon-btn"
+                title={activeEntry ? "Clock out to add a work session" : "Add Work Session"}
+                aria-label="Add work session"
+                disabled={Boolean(activeEntry)}
+                onClick={() => {
+                  resetWorkSessionForm();
+                  setWorkSessionOpen(true);
+                }}
               >
-                <Bell className="h-5 w-5" />
-                <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
-              </Button>
-            </Link>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleTheme}
-            >
-              {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </Button>
-          </div>
-        </div>
+                <Plus className="h-[18px] w-[18px]" />
+              </button>
+              <button
+                type="button"
+                className="now-icon-btn"
+                title="Add Overtime"
+                aria-label="Add overtime"
+                onClick={() => {
+                  if (myProjects && myProjects.length > 0) {
+                    setOvertimeProjectId(String(myProjects[0].id));
+                  }
+                  setOvertimeTaskId("");
+                  setOvertimeDate(format(new Date(), "yyyy-MM-dd"));
+                  setOvertimeHours("1");
+                  setOvertimeDescription("");
+                  setOvertimeOpen(true);
+                }}
+              >
+                <Timer className="h-[18px] w-[18px]" />
+              </button>
+              <button type="button" className="now-icon-btn" title="Support Ticket" aria-label="Support ticket" onClick={() => setFeedbackOpen(true)}>
+                <LifeBuoy className="h-[18px] w-[18px]" />
+              </button>
+              <Link href="/leave" className="now-icon-btn" title="Apply Leave" aria-label="Apply leave">
+                <ClipboardList className="h-[18px] w-[18px]" />
+              </Link>
+              <button type="button" className="now-icon-btn" title="Notifications" aria-label="Notifications" onClick={() => setNotificationSidebarOpen(true)}>
+                <Bell className="h-[18px] w-[18px]" />
+                {unreadNotifications > 0 && <span className="dot" />}
+              </button>
+            </div>
+          </header>
 
-        <div className="p-4 md:p-6 lg:p-8">
-          {/* Greeting Section */}
-          <div className="mb-6 md:mb-8">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-              <div className="flex items-center gap-3">
-                {user?.avatar && user.avatar.startsWith("http") ? (
-                  <img
-                    src={user.avatar}
-                    alt="Avatar"
-                    className="h-12 w-12 rounded-full object-cover ring-2 ring-border shrink-0"
-                  />
-                ) : (
-                  <div 
-                    className="h-12 w-12 rounded-full flex items-center justify-center text-2xl shrink-0"
-                    style={{ backgroundColor: getAvatarById(user?.avatar).color + "20" }}
-                  >
-                    {getAvatarById(user?.avatar).emoji}
+          <div className="now-cols">
+            <div className="now-col-main">
+              {/* Today's brief, worked out from the clock, tasks, chat and calendar */}
+              <section className="now-wm">
+                <div className="now-wm-label">
+                  <img src="/wingman-logo.jpg" alt="" className="h-6 w-6 rounded-md" />
+                  <span>Wingman · today</span>
+                </div>
+                <h2>
+                  {briefItems.length === 0
+                    ? "You're all caught up."
+                    : briefItems.length === 1
+                      ? "One thing needs you today."
+                      : `${briefItems.length} things need you today.`}
+                </h2>
+                {briefItems.length > 0 && (
+                  <div className="now-brief">
+                    {briefItems.map(item => (
+                      <div key={item.key}>
+                        <div className="min-w-0">
+                          <div className="font-semibold">{item.title}</div>
+                          <div className="now-small now-muted">{item.detail}</div>
+                        </div>
+                        {item.href ? (
+                          <Link href={item.href} className="now-btn text shrink-0">{item.action}</Link>
+                        ) : (
+                          <button type="button" className="now-btn text shrink-0" onClick={item.onClick}>{item.action}</button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
-                <div>
-                  <h2 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-                    <Sun className="h-8 w-8 text-yellow-500" />
-                    Good {new Date().getHours() < 12 ? "Morning" : new Date().getHours() < 18 ? "Afternoon" : "Evening"}, {user?.name}!
-                  </h2>
-                  <p className="text-muted-foreground mt-1">
-                    {format(currentTime, "EEEE, MMMM dd, yyyy")} • {format(currentTime, "HH:mm:ss")}
-                  </p>
-                </div>
-              </div>
+              </section>
 
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setCalendarSidebarOpen(true)}
-                  title="Today's Schedule"
-                  className="transition-all hover:scale-110 hover:shadow-lg"
-                >
-                  <Calendar className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setMeetingSidebarOpen(true)}
-                  title="Quick Meeting"
-                  className="transition-all hover:scale-110 hover:shadow-lg"
-                >
-                  <Users className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => {
-                    resetWorkSessionForm();
-                    setWorkSessionOpen(true);
-                  }}
-                  title={activeEntry ? "Clock out to add a work session" : "Add Work Session"}
-                  className="transition-all hover:scale-110 hover:shadow-lg"
-                  disabled={Boolean(activeEntry)}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => {
-                    if (myProjects && myProjects.length > 0) {
-                      setOvertimeProjectId(String(myProjects[0].id));
-                    }
-                    setOvertimeTaskId("");
-                    setOvertimeDate(format(new Date(), "yyyy-MM-dd"));
-                    setOvertimeHours("1");
-                    setOvertimeDescription("");
-                    setOvertimeOpen(true);
-                  }}
-                  title="Add Overtime"
-                  className="transition-all hover:scale-110 hover:shadow-lg"
-                >
-                  <Timer className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setFeedbackOpen(true)}
-                  title="Support Ticket"
-                  className="transition-all hover:scale-110 hover:shadow-lg"
-                >
-                  <LifeBuoy className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  asChild
-                  title="Apply Leave"
-                  className="transition-all hover:scale-110 hover:shadow-lg"
-                >
-                  <Link href="/leave">
-                    <ClipboardList className="h-4 w-4" />
-                  </Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setNotificationSidebarOpen(true)}
-                  className="relative transition-all hover:scale-110 hover:shadow-lg"
-                  title="Notifications"
-                >
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full"></span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={toggleTheme}
-                  title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
-                  className="transition-all hover:scale-110 hover:shadow-lg hover:rotate-180"
-                >
-                  {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                </Button>
-                {activeEntry ? (
-                  <>
-                    <Button onClick={() => setTimeDialogOpen(true)}>
-                      <Clock className="h-4 w-4 mr-2" />
-                      Clock Out
+              {/* My tasks */}
+              <section className="now-card" style={{ paddingBottom: 8, gap: 0 }}>
+                <div className="now-card-head" style={{ marginBottom: 8 }}>
+                  <h2 className="now-h2">My tasks</h2>
+                  <div className="flex items-baseline gap-4">
+                    <span className="now-muted text-sm">{doneTaskCount} of {dashboardTasks.length} done</span>
+                    <Link href="/board" className="now-link">Open board</Link>
+                  </div>
+                </div>
+                {dashboardTasks.length === 0 && (
+                  <p className="now-muted text-sm py-6 text-center">No tasks assigned to you yet.</p>
+                )}
+                {dashboardTasks.map((task: any) => {
+                  const done = task.status === "completed";
+                  const due = task.completionDate ? new Date(task.completionDate) : null;
+                  const late = Boolean(due && !done && due.getTime() < startOfDay(currentTime).getTime());
+                  return (
+                    <div className="now-task-row" key={task.id}>
+                      <button
+                        type="button"
+                        className={`now-check${done ? " done" : ""}`}
+                        aria-pressed={done}
+                        aria-label={`Mark "${task.title}" ${done ? "not done" : "done"}`}
+                        disabled={updateTaskMutation.isPending}
+                        onClick={() =>
+                          updateTaskMutation.mutate({
+                            taskId: String(task.id),
+                            status: done ? "todo" : "completed",
+                          })
+                        }
+                      >
+                        <span><Check className="h-3.5 w-3.5" strokeWidth={3.5} /></span>
+                      </button>
+                      <div className={`now-task-title truncate${done ? " done" : ""}`}>{task.title}</div>
+                      <div className="now-small now-muted now-task-project truncate max-w-[160px]">{task.project?.name || ""}</div>
+                      <div className={`now-task-due${late ? " now-warn" : ""}`}>
+                        {done ? "Done" : due ? (late ? `Late · ${format(due, "d MMM")}` : format(due, "d MMM")) : task.status === "blocked" ? "Blocked" : ""}
+                      </div>
+                    </div>
+                  );
+                })}
+              </section>
+
+              {/* Project health */}
+              <section className="now-card" style={{ gap: 16 }}>
+                <div className="now-card-head">
+                  <h2 className="now-h2">Project health</h2>
+                  <Link href="/projects" className="now-link">All projects</Link>
+                </div>
+                {myProjects && myProjects.length > 0 ? (
+                  <div className="now-project-grid">
+                    {myProjects.slice(0, 4).map((project: any) => {
+                      const health = projectHealth.get(String(project.id)) ?? { total: 0, done: 0, late: 0 };
+                      const pct = health.total ? Math.round((health.done / health.total) * 100) : 0;
+                      const atRisk = health.late > 0 || project.status === "on_hold";
+                      return (
+                        <div className="now-tile" key={project.id}>
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="font-bold text-[17px] truncate">{project.name}</div>
+                            <span className={`now-pill ${atRisk ? "risk" : "lime"}`}>
+                              {health.late > 0 ? "At risk" : String(project.status || "active").replace(/_/g, " ")}
+                            </span>
+                          </div>
+                          <div className="now-bar on-tile">
+                            <span className={atRisk ? "risk" : ""} style={{ width: `${pct}%` }} />
+                          </div>
+                          <div className="flex items-center justify-between gap-3 now-small now-muted">
+                            <span>{health.total ? `${health.done} of ${health.total} of your tasks done` : "No tasks for you yet"}</span>
+                            <span className="capitalize">{health.late > 0 ? `${health.late} late` : project.role || project.priority || ""}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 now-muted">
+                    <FolderKanban className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                    <p className="text-sm">No projects assigned yet</p>
+                  </div>
+                )}
+              </section>
+
+              {/* Week at a glance */}
+              <section className="now-card" style={{ gap: 18 }}>
+                <h2 className="now-h2">Your week at a glance</h2>
+                <div className="now-stat-grid">
+                  <div>
+                    <div className="now-stat-label">Avg hours this week</div>
+                    <div className="now-stat-value">{insights.avgHours.toFixed(1)}</div>
+                  </div>
+                  <div>
+                    <div className="now-stat-label">Avg hours per day (month)</div>
+                    <div className="now-stat-value">{stats.avgHours.toFixed(1)}</div>
+                  </div>
+                  <div>
+                    <div className="now-stat-label">Days present this month</div>
+                    <div className="now-stat-value">{stats.presentDays}</div>
+                  </div>
+                  <div>
+                    <div className="now-stat-label">Early timeouts</div>
+                    <div className={`now-stat-value${insights.earlyTimeouts > 0 ? " now-warn" : ""}`}>{insights.earlyTimeouts}</div>
+                  </div>
+                  <div>
+                    <div className="now-stat-label">OT hours this week</div>
+                    <div className="now-stat-value">{weeklyOvertimeHours.toFixed(1)}</div>
+                  </div>
+                  <div>
+                    <div className="now-stat-label">Projects assigned</div>
+                    <div className="now-stat-value">{projectStats?.totalAssigned || 0}</div>
+                  </div>
+                  <div>
+                    <div className="now-stat-label">Active projects</div>
+                    <div className="now-stat-value">{projectStats?.activeProjects || 0}</div>
+                  </div>
+                  <div>
+                    <div className="now-stat-label">Task completion</div>
+                    <div className="now-stat-value">{taskCompletionRate.toFixed(0)}%</div>
+                    <div className="now-small now-muted">{myTaskStats?.completed || 0}/{myTaskStats?.total || 0} tasks</div>
+                  </div>
+                  <div>
+                    <div className="now-stat-label">Last clock-in</div>
+                    <div className="font-semibold mt-1">{insights.lastDayOff}</div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Attendance trends */}
+              <section className="now-card">
+                <div className="now-card-head" style={{ alignItems: "center" }}>
+                  <h2 className="now-h2">Attendance trends</h2>
+                  <div className="flex gap-1">
+                    <Button
+                      variant={attendanceView === 'graph' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setAttendanceView('graph')}
+                      className="h-8 px-2.5"
+                      aria-label="Graph view"
+                    >
+                      <BarChart3 className="h-4 w-4" />
                     </Button>
                     <Button
-                      variant="outline"
-                      onClick={() => activeBreak ? endBreakMutation.mutate() : setBreakDialogOpen(true)}
+                      variant={attendanceView === 'list' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setAttendanceView('list')}
+                      className="h-8 px-2.5"
+                      aria-label="List view"
                     >
-                      <Coffee className="h-4 w-4 mr-2" />
-                      {activeBreak ? "End Break" : "Start Break"}
+                      <List className="h-4 w-4" />
                     </Button>
-                  </>
+                  </div>
+                </div>
+                {monthAttendance && monthAttendance.length > 0 ? (
+                  attendanceView === 'graph' ? (
+                    <div className="h-52">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={monthAttendance.slice(0, 10).reverse().map((entry) => ({
+                          date: format(new Date(entry.timeIn), 'MMM dd'),
+                          hours: entry.timeOut
+                            ? Number(((new Date(entry.timeOut).getTime() - new Date(entry.timeIn).getTime()) / (1000 * 60 * 60)).toFixed(1))
+                            : 0
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                          <XAxis dataKey="date" tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} stroke="var(--border)" />
+                          <YAxis tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} stroke="var(--border)" width={32} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12 }}
+                            labelStyle={{ color: 'var(--foreground)' }}
+                          />
+                          <Line type="monotone" dataKey="hours" name="Hours" stroke="var(--primary)" strokeWidth={2} dot={{ fill: 'var(--primary)', r: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-52 overflow-y-auto">
+                      {monthAttendance.slice(0, 5).map((entry) => (
+                        <div key={entry.id} className="flex items-center justify-between px-3 py-2 bg-background rounded-xl text-sm">
+                          <div>
+                            <p className="font-semibold">{format(new Date(entry.timeIn), "MMM dd")}</p>
+                            <p className="now-small now-muted font-mono">
+                              {format(new Date(entry.timeIn), "HH:mm")} - {entry.timeOut ? format(new Date(entry.timeOut), "HH:mm") : "Active"}
+                            </p>
+                          </div>
+                          <span className={`now-pill ${entry.status === "completed" || entry.status === "active" ? "lime" : "risk"}`}>
+                            {entry.timeOut ? `${((new Date(entry.timeOut).getTime() - new Date(entry.timeIn).getTime()) / (1000 * 60 * 60)).toFixed(1)}h` : 'Active'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )
                 ) : (
-                  <Button onClick={() => setTimeDialogOpen(true)}>
-                    <Clock className="h-4 w-4 mr-2" />
-                    Clock In
-                  </Button>
+                  <p className="text-center now-muted py-8 text-sm">No attendance data available</p>
                 )}
-              </div>
+              </section>
             </div>
 
-            {/* Weekly Insights */}
-            <Card className="p-6 bg-primary/5">
-              <h3 className="font-semibold mb-3">Your Week at a Glance:</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Average hours this week:</span>
-                  <p className="font-semibold">{insights.avgHours.toFixed(2)} hrs</p>
+            <div className="now-col-side">
+              {/* Time clock */}
+              <section className="now-card" style={{ gap: 16 }}>
+                <div className="flex items-center justify-between">
+                  <h2 className="now-h2">Time clock</h2>
+                  <span className={`now-pill md${!activeEntry ? "" : activeBreak ? " risk" : " lime"}`} aria-live="polite">
+                    {!activeEntry ? "Clocked out" : activeBreak ? "On break" : "Clocked in"}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Last day off:</span>
-                  <p className="font-semibold">{insights.lastDayOff}</p>
+                  <div className="now-timer">{activeEntry ? elapsedLabel : "00:00:00"}</div>
+                  <div className="now-muted text-sm mt-2">
+                    {!activeEntry
+                      ? "You are clocked out."
+                      : activeBreak
+                        ? `On break since ${format(new Date(activeBreak.breakStart), "HH:mm")}`
+                        : `Since ${format(new Date(activeEntry.timeIn), "HH:mm")} today`}
+                  </div>
+                </div>
+                <div className="flex gap-2.5">
+                  <button
+                    type="button"
+                    className={`now-btn grow ${activeEntry ? "ink" : "lime"}`}
+                    onClick={() => setTimeDialogOpen(true)}
+                  >
+                    {activeEntry ? "Clock out" : "Clock in"}
+                  </button>
+                  <button
+                    type="button"
+                    className="now-btn grow"
+                    disabled={!activeEntry || endBreakMutation.isPending}
+                    onClick={() => (activeBreak ? endBreakMutation.mutate() : setBreakDialogOpen(true))}
+                  >
+                    {activeBreak ? "End break" : "Start break"}
+                  </button>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Early timeouts this month:</span>
-                  <p className="font-semibold">{insights.earlyTimeouts}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Total working days:</span>
-                  <p className="font-semibold">{stats.presentDays}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Projects assigned:</span>
-                  <p className="font-semibold">{projectStats?.totalAssigned || 0}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Active projects:</span>
-                  <p className="font-semibold">{projectStats?.activeProjects || 0}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">OT hours this week:</span>
-                  <p className="font-semibold">{weeklyOvertimeHours.toFixed(2)} hrs</p>
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Stats Grid - Compact */}
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-            <Card className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-blue-500/10 rounded-lg">
-                  <Calendar className="h-6 w-6 text-blue-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Current Month Attendance</p>
-                  <p className="text-2xl font-bold">{stats.presentDays}</p>
-                  <p className="text-xs text-muted-foreground">days present</p>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-green-500/10 rounded-lg">
-                  <TrendingUp className="h-6 w-6 text-green-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Average Working Hours</p>
-                  <p className="text-2xl font-bold">{stats.avgHours.toFixed(1)}</p>
-                  <p className="text-xs text-muted-foreground">hours per day</p>
-                </div>
-              </div>
-            </Card>
-
-            <Card className={`p-6 ${activeEntry ? "bg-green-500/10" : "bg-red-500/10"}`}>
-              <div className="flex items-center gap-4">
-                <div className={`p-3 ${activeEntry ? "bg-green-500/20" : "bg-red-500/20"} rounded-lg`}>
-                  <Clock className={`h-6 w-6 ${activeEntry ? "text-green-600" : "text-red-600"}`} />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
-                  <p className={`text-2xl font-bold ${activeEntry ? "text-green-600" : "text-red-600"}`}>
-                    {activeEntry ? "Clocked In" : "Clocked Out"}
-                  </p>
-                  {activeEntry && (
-                    <p className="text-xs text-muted-foreground">
-                      {format(new Date(activeEntry.timeIn), "HH:mm")}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-purple-500/10 rounded-lg">
-                  <Timer className="h-6 w-6 text-purple-500" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-muted-foreground">Weekly Hours</p>
-                  <p className={`text-2xl font-bold ${weeklyHoursSummary.total < 0 ? "text-red-500" : ""}`}>
-                    {weeklyHoursSummary.total.toFixed(1)} / {weeklyTargetHours}
-                  </p>
-                  <Progress value={weeklyHoursSummary.progress} className="h-2 mt-2" />
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="now-muted">This week</span>
+                    <span className={`font-semibold${weeklyHoursSummary.total < 0 ? " now-warn" : ""}`}>
+                      {weeklyHoursSummary.total.toFixed(1)} of {weeklyTargetHours} h
+                    </span>
+                  </div>
+                  <div className="now-bar mt-2"><span style={{ width: `${weeklyHoursSummary.progress}%` }} /></div>
                   {weeklyHoursSummary.missingCount > 0 && (
-                    <p className="text-xs text-red-500 mt-1">
+                    <p className="now-small now-warn mt-2">
                       Missing clock-outs: {weeklyHoursSummary.missingCount} (-{weeklyHoursSummary.missingPenalty}h)
                     </p>
                   )}
                 </div>
-              </div>
-            </Card>
+              </section>
 
-            <Card className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-green-500/10 rounded-lg">
-                  <CheckCircle2 className="h-6 w-6 text-green-500" />
+              {/* Today's schedule */}
+              <section className="now-card">
+                <div className="now-card-head">
+                  <h2 className="now-h2">Rest of today</h2>
+                  <Link href="/calendar" className="now-link">Calendar</Link>
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm text-muted-foreground">Task Completion</p>
-                  <p className="text-2xl font-bold">{taskCompletionRate.toFixed(0)}%</p>
-                  <Progress value={taskCompletionRate} className="h-2 mt-2" />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {myTaskStats?.completed || 0}/{myTaskStats?.total || 0} tasks
-                  </p>
+                <div className="max-h-64 overflow-y-auto">
+                  <TodayCalendarWidgetContent />
                 </div>
-              </div>
-            </Card>
-          </div>
+              </section>
 
-          {/* Attendance Trends & Payslip */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <Card className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-base font-semibold">Attendance Trends</h3>
-                <div className="flex gap-1">
-                  <Button
-                    variant={attendanceView === 'graph' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setAttendanceView('graph')}
-                    className="h-7 px-2"
-                  >
-                    <BarChart3 className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant={attendanceView === 'list' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setAttendanceView('list')}
-                    className="h-7 px-2"
-                  >
-                    <List className="h-3.5 w-3.5" />
-                  </Button>
+              {/* Leave */}
+              <section className="now-card">
+                <div className="now-card-head">
+                  <h2 className="now-h2">Leave this year</h2>
+                  <Link href="/leave" className="now-link">Apply</Link>
                 </div>
-              </div>
-              {monthAttendance && monthAttendance.length > 0 ? (
-                attendanceView === 'graph' ? (
-                  <div className="h-48">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={monthAttendance.slice(0, 10).reverse().map((entry) => ({
-                        date: format(new Date(entry.timeIn), 'MMM dd'),
-                        hours: entry.timeOut 
-                          ? ((new Date(entry.timeOut).getTime() - new Date(entry.timeIn).getTime()) / (1000 * 60 * 60)).toFixed(1)
-                          : 0
-                      }))}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                        <XAxis dataKey="date" className="text-xs" />
-                        <YAxis className="text-xs" />
-                        <Tooltip 
-                          contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}
-                          labelStyle={{ color: 'hsl(var(--foreground))' }}
-                        />
-                        <Line type="monotone" dataKey="hours" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6' }} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {monthAttendance.slice(0, 5).map((entry) => (
-                      <div key={entry.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg text-sm">
-                        <div>
-                          <p className="font-medium text-xs">{format(new Date(entry.timeIn), "MMM dd")}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(entry.timeIn), "HH:mm")} - {entry.timeOut ? format(new Date(entry.timeOut), "HH:mm") : "Active"}
-                          </p>
-                        </div>
-                        <div className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          entry.status === "completed" ? "bg-green-500/20 text-green-600" :
-                          entry.status === "active" ? "bg-blue-500/20 text-blue-600" :
-                          "bg-red-500/20 text-red-600"
-                        }`}>
-                          {entry.timeOut ? `${((new Date(entry.timeOut).getTime() - new Date(entry.timeIn).getTime()) / (1000 * 60 * 60)).toFixed(1)}h` : 'Active'}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )
-              ) : (
-                <p className="text-center text-muted-foreground py-8 text-sm">No attendance data available</p>
-              )}
-            </Card>
-
-            <Card className="p-4">
-              <h3 className="text-base font-semibold mb-3">Latest Payslip</h3>
-              <div className="text-center py-8 text-muted-foreground">
-                <DollarSign className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                <p className="text-sm">No payslip data available</p>
-                <Button variant="link" asChild className="mt-2 text-xs">
-                  <Link href="/payslips">View all payslips</Link>
-                </Button>
-              </div>
-            </Card>
-          </div>
-
-          {/* Current Projects & Today's Schedule - Side by Side */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-            <Card className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-base font-semibold">Current Projects</h3>
-                <Button variant="link" asChild className="text-xs">
-                  <Link href="/projects">View all</Link>
-                </Button>
-              </div>
-              {myProjects && myProjects.length > 0 ? (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {myProjects.slice(0, 3).map((project: any) => (
-                    <div key={project.id} className="p-3 border-l-4 border-l-primary bg-muted/30 rounded">
-                      <div className="space-y-1">
-                        <div className="flex items-start justify-between">
-                          <h4 className="font-semibold text-sm line-clamp-1">{project.name}</h4>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            project.priority === "high" ? "bg-red-500/10 text-red-500" :
-                            project.priority === "medium" ? "bg-yellow-500/10 text-yellow-500" :
-                            "bg-blue-500/10 text-blue-500"
-                          }`}>
-                            {project.priority}
-                          </span>
-                        </div>
-                        {project.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-1">
-                            {project.description}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span className="capitalize">{project.status.replace("_", " ")}</span>
-                          {project.role && <span>• {project.role}</span>}
-                        </div>
-                      </div>
+                <div className="flex flex-wrap gap-x-6 gap-y-4">
+                  {leaveSummary.map(item => (
+                    <div key={item.type}>
+                      <div className="now-big-num">{item.days}</div>
+                      <div className="now-small now-muted mt-1 capitalize">{item.type}</div>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <FolderKanban className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm">No projects assigned yet</p>
+                <div className="now-small now-muted">
+                  Days taken (approved){pendingLeaveCount > 0 ? ` · ${pendingLeaveCount} request${pendingLeaveCount > 1 ? "s" : ""} pending` : ""}
                 </div>
+              </section>
+
+              {/* Latest payslip */}
+              <section className="now-card">
+                <div className="now-card-head">
+                  <h2 className="now-h2">Latest payslip</h2>
+                  <Link href="/payslips" className="now-link">All payslips</Link>
+                </div>
+                <div className="flex items-center gap-3 now-muted">
+                  <DollarSign className="h-5 w-5 shrink-0" />
+                  <span className="text-sm">Open Payslips to view and download your salary slips.</span>
+                </div>
+              </section>
+
+              {/* Announcement */}
+              {latestAnnouncement && (
+                <section className="now-card" style={{ gap: 8 }}>
+                  <div className="now-small now-muted">
+                    Announcement{latestAnnouncement.createdAt ? ` · ${format(new Date(latestAnnouncement.createdAt), "d MMM")}` : ""}
+                  </div>
+                  <div className="font-bold">{latestAnnouncement.title}</div>
+                  <div className="text-sm text-muted-foreground line-clamp-3">{latestAnnouncement.content || latestAnnouncement.message || ""}</div>
+                  <Link href="/announcements" className="now-link">Read more</Link>
+                </section>
               )}
-            </Card>
-
-            {/* Today's Schedule */}
-            <Card className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-base font-semibold">Today's Schedule</h3>
-                <Button variant="ghost" size="sm" asChild className="text-xs">
-                  <Link href="/calendar">
-                    <Calendar className="h-3.5 w-3.5 mr-1" />
-                    View All
-                  </Link>
-                </Button>
-              </div>
-              <div className="max-h-64 overflow-y-auto">
-                <TodayCalendarWidgetContent />
-              </div>
-            </Card>
+            </div>
           </div>
-
-
         </div>
-      </main>
 
       {/* Time In/Out Dialog */}
       <TimeInOutDialog open={timeDialogOpen} onOpenChange={setTimeDialogOpen} />
@@ -1415,13 +1396,13 @@ export default function Dashboard() {
       </Dialog>
 
       {/* Global Chat Widget */}
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
+      <div className="fixed bottom-6 max-[900px]:bottom-24 right-6 z-40 flex items-center gap-3">
         <Button
           onClick={() => {
             setNotesOpen(true);
             setFabOpen(false);
           }}
-          className={`h-12 w-12 rounded-full shadow-premium-lg bg-[#ff8a00] hover:bg-[#ff7a00] text-white transition-all ${
+          className={`h-12 w-12 rounded-full shadow-premium-lg bg-[#10140f] hover:bg-[#1c221a] text-[#c8f169] transition-all ${
             fabOpen ? "opacity-100 translate-x-0" : "opacity-0 translate-x-6 pointer-events-none"
           }`}
           size="icon"
@@ -1434,7 +1415,7 @@ export default function Dashboard() {
             setChatOpen(true);
             setFabOpen(false);
           }}
-          className={`h-12 w-12 rounded-full shadow-premium-lg bg-[#ff2801] hover:bg-[#e62401] text-white transition-all ${
+          className={`h-12 w-12 rounded-full shadow-premium-lg bg-[#4233e0] hover:bg-[#2a1fb0] text-white transition-all ${
             fabOpen ? "opacity-100 translate-x-0" : "opacity-0 translate-x-6 pointer-events-none"
           }`}
           size="icon"
@@ -1444,7 +1425,7 @@ export default function Dashboard() {
         </Button>
         <Button
           onClick={() => setFabOpen(!fabOpen)}
-          className="h-14 w-14 rounded-full shadow-premium-lg bg-primary hover:bg-primary/90 text-white"
+          className="h-14 w-14 rounded-full shadow-premium-lg bg-[#c8f169] hover:bg-[#b9e455] text-[#10140f]"
           size="icon"
           title="Quick Actions"
         >
@@ -1524,6 +1505,6 @@ export default function Dashboard() {
           </Card>
         </div>
       )}
-    </div>
+    </NowShell>
   );
 }
