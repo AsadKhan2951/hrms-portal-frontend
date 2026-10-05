@@ -95,8 +95,11 @@ export function Segmented<T extends string>({
   options: { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
-  /** "ink" fills the chosen one black; "soft" lifts it on a tinted track. */
-  tone?: "ink" | "soft";
+  /**
+   * "ink" fills the chosen one black; "soft" lifts it on a tinted track;
+   * "pick" is a white track with the chosen one set into it.
+   */
+  tone?: "ink" | "soft" | "pick";
   label: string;
 }) {
   return (

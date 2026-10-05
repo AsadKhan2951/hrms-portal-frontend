@@ -3,16 +3,16 @@ import { Link } from "wouter";
 import { DragDropContext, Droppable, type DropResult } from "@hello-pangea/dnd";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Check, ChevronDown, Layers, Loader2, MoreHorizontal, Pencil, Plus,
-  Search, Settings, Settings2, Sun, Moon, Trash2, Users,
+  Check, ChevronDown, Columns3, FolderPlus, Layers, Loader2, MoreHorizontal, Pencil, Plus,
+  Search, Settings, Trash2,
 } from "lucide-react";
 
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useFPBTheme } from "@/hooks/useFPBTheme";
 import { trpc } from "@/lib/trpc";
 import { isOrgWide } from "@/lib/roles";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import LayoutWrapper from "@/components/LayoutWrapper";
+import { NowPageHeader, Segmented, WingmanBanner } from "@/components/now/NowPage";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -20,6 +20,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 import { TaskCard } from "@/pages/fpb/TaskCard";
 import { NewProjectModal } from "@/pages/fpb/NewProjectModal";
@@ -28,21 +29,33 @@ import { NewTaskModal } from "@/pages/fpb/NewTaskModal";
 import { TaskDetailModal } from "@/pages/fpb/TaskDetailModal";
 import { ProjectSettingsModal } from "@/pages/fpb/ProjectSettingsModal";
 import { AddColumnModal } from "@/pages/fpb/AddColumnModal";
-import { PROJECT_TYPES, getTypeInfo, initialOf } from "@/pages/fpb/shared";
+import {
+  PROJECT_TYPES, boardStats, formatDate, getTypeInfo, initialsOf, taskTag,
+} from "@/pages/fpb/shared";
 
 const SELECTED_KEY = "fpb-selected-project";
+const VIEW_KEY = "fpb-view";
+/** Up to this many projects sit side by side as buttons; more become a picker. */
+const INLINE_PROJECTS = 4;
+
+type BoardView = "board" | "list";
 
 export default function FlowProjectBoard() {
   const { user } = useAuth();
   const isAdmin = isOrgWide((user as any)?.role);
+  const myId = (user as any)?.id ? String((user as any).id) : null;
   const utils = trpc.useUtils();
-  const { theme, toggle, t } = useFPBTheme();
+  const { t } = useFPBTheme();
 
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     try { return localStorage.getItem(SELECTED_KEY); } catch { return null; }
   });
+  const [view, setView] = useState<BoardView>(() => {
+    try { return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "board"; } catch { return "board"; }
+  });
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newSubprojectOpen, setNewSubprojectOpen] = useState(false);
   const [addColumnOpen, setAddColumnOpen] = useState(false);
@@ -71,6 +84,10 @@ export default function FlowProjectBoard() {
     if (!activeId) return;
     try { localStorage.setItem(SELECTED_KEY, activeId); } catch { /* private mode */ }
   }, [activeId]);
+
+  useEffect(() => {
+    try { localStorage.setItem(VIEW_KEY, view); } catch { /* private mode */ }
+  }, [view]);
 
   // Switching projects clears the sub-project choice, so the server falls back
   // to the new project's first sub-project rather than one from the old board.
@@ -137,6 +154,8 @@ export default function FlowProjectBoard() {
     return map;
   }, [tasks]);
 
+  const stats = useMemo(() => boardStats(tasks, myId), [tasks, myId]);
+
   const visibleProjects = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return projects as any[];
@@ -157,130 +176,96 @@ export default function FlowProjectBoard() {
     [moveTask]
   );
 
+  const usePicker = (projects as any[]).length > INLINE_PROJECTS || filterType !== "all";
+  const subtitle = project
+    ? [
+        subprojects.length > 1 ? activeSub?.name : null,
+        `${tasks.length} task${tasks.length === 1 ? "" : "s"}`,
+        stats.total > 0 ? `${stats.done} done` : null,
+      ].filter(Boolean).join(" · ")
+    : "Your projects and their tasks";
+
+  const atRisk = stats.overdue > 0 || stats.blocked > 0;
+  const healthNote = [
+    stats.overdue > 0 ? `${stats.overdue} overdue` : null,
+    stats.blocked > 0 ? `${stats.blocked} blocked` : null,
+  ].filter(Boolean).join(", ");
+
   return (
-    <div className={`flex h-screen ${t.bg} overflow-hidden`}>
-      {/* ─────────────────────────────── Projects sidebar */}
-      <aside className={`w-64 flex-shrink-0 border-r ${t.border} flex flex-col ${t.card}`}>
-        <div className={`px-4 py-4 border-b ${t.border}`}>
-          <Link href="/dashboard">
-            <button className={`flex items-center gap-1.5 text-xs mb-3 ${t.textMuted} hover:opacity-80`}>
-              <ArrowLeft className="w-3.5 h-3.5" /> Back to portal
-            </button>
-          </Link>
-          <h2 className={`text-sm font-semibold ${t.textPrimary}`}>Projects</h2>
-          <p className={`text-xs mt-0.5 ${t.textMuted}`}>
-            {projects.length} project{projects.length === 1 ? "" : "s"}
-          </p>
-        </div>
+    <LayoutWrapper>
+      <div className="now-page">
+        <NowPageHeader title={project?.title ?? "Work"} subtitle={subtitle} />
 
-        <div className="px-3 pt-3 space-y-2">
-          <div className="relative">
-            <Search className={`w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 ${t.textMuted}`} />
-            <Input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search projects..."
-              className={`h-8 pl-8 text-xs ${t.input}`}
-            />
-          </div>
-          <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className={`h-8 text-xs ${t.select}`}>
-              <SelectValue placeholder="All types" />
-            </SelectTrigger>
-            <SelectContent className={t.selectContent}>
-              <SelectItem value="all">All types</SelectItem>
-              {PROJECT_TYPES.map(pt => (
-                <SelectItem key={pt.value} value={pt.value}>
-                  <span className={`flex items-center gap-1.5 ${pt.color}`}>{pt.icon} {pt.short}</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {/* ───────────────────────── Project, sub-project, view, new task */}
+        <div className="now-board-bar">
+          <div className="now-board-bar-left">
+            {!usePicker && (projects as any[]).length > 1 && (
+              <Segmented
+                label="Project"
+                tone="ink"
+                value={activeId ?? ""}
+                onChange={id => setSelectedId(id)}
+                options={(projects as any[]).map(p => ({ value: p.id, label: p.title }))}
+              />
+            )}
 
-        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
-          {projectsLoading && (
-            <div className={`flex items-center gap-2 text-xs px-2 py-3 ${t.textMuted}`}>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading...
-            </div>
-          )}
-          {!projectsLoading && visibleProjects.length === 0 && (
-            <p className={`text-xs px-2 py-6 text-center ${t.textMuted}`}>
-              {search ? "No match" : "No projects yet"}
-            </p>
-          )}
-          {visibleProjects.map(p => {
-            const info = getTypeInfo(p.projectType);
-            const active = p.id === activeId;
-            return (
-              <button
-                key={p.id}
-                onClick={() => setSelectedId(p.id)}
-                className={`w-full text-left rounded-lg px-2.5 py-2 transition-colors ${
-                  active ? "bg-[#4233e0]/20 border border-[#4233e0]/40" : `border border-transparent ${t.surfaceHover}`
-                }`}
-              >
-                <div className={`flex items-center gap-1.5 mb-1 ${info.color}`}>
-                  {info.icon}
-                  <span className="text-[9px] font-medium uppercase tracking-wider opacity-70">
-                    {info.short}
-                  </span>
-                </div>
-                <p className={`text-sm leading-snug line-clamp-2 ${
-                  active ? t.textPrimary : t.textSecondary
-                }`}>
-                  {p.title}
-                </p>
-                <div className="flex items-center justify-between mt-1.5">
-                  <span className={`text-[10px] ${t.textMuted}`}>
-                    {p.completedTasks}/{p.taskCount} tasks
-                  </span>
-                  <div className="flex -space-x-1">
-                    {(p.memberIds ?? []).slice(0, 3).map((id: string) => (
-                      <span
-                        key={id}
-                        className="w-4 h-4 rounded-full bg-gradient-to-br from-[#4233e0] to-[#8f86ff] flex items-center justify-center text-[8px] text-white font-bold"
+            {usePicker && (
+              <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+                <PopoverTrigger asChild>
+                  <button type="button" className="now-pick" aria-label="Choose a project">
+                    <span className="truncate">{project?.title ?? "Choose a project"}</span>
+                    <ChevronDown className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-[min(340px,calc(100vw-32px))] rounded-2xl border-border bg-card p-3">
+                  <div className="now-input-wrap" style={{ minHeight: 44 }}>
+                    <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <input
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                      placeholder="Search projects"
+                      aria-label="Search projects"
+                    />
+                  </div>
+                  <Select value={filterType} onValueChange={setFilterType}>
+                    <SelectTrigger className={`mt-2 h-11 w-full rounded-xl ${t.select}`}>
+                      <SelectValue placeholder="All types" />
+                    </SelectTrigger>
+                    <SelectContent className={t.selectContent}>
+                      <SelectItem value="all">All types</SelectItem>
+                      {PROJECT_TYPES.map(pt => (
+                        <SelectItem key={pt.value} value={pt.value}>{pt.short}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="mt-2 max-h-[320px] overflow-y-auto">
+                    {visibleProjects.length === 0 && (
+                      <p className="now-muted now-small px-2 py-4 text-center">
+                        {search ? "No project matches that." : "No projects of this type."}
+                      </p>
+                    )}
+                    {visibleProjects.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="now-pick-row"
+                        aria-current={p.id === activeId}
+                        onClick={() => { setSelectedId(p.id); setPickerOpen(false); }}
                       >
-                        {initialOf((users as any[]).find(u => u.id === id))}
-                      </span>
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold">{p.title}</span>
+                          <span className="now-row-sub">
+                            {getTypeInfo(p.projectType).short} · {p.completedTasks}/{p.taskCount} done
+                          </span>
+                        </span>
+                        {p.id === activeId && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                      </button>
                     ))}
                   </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+                </PopoverContent>
+              </Popover>
+            )}
 
-        {mayCreate && (
-          <div className={`p-3 border-t ${t.border}`}>
-            <Button
-              onClick={() => setNewProjectOpen(true)}
-              size="sm"
-              className="w-full bg-[#4233e0] hover:bg-[#2a1fb0] text-white"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1.5" /> New Project
-            </Button>
-          </div>
-        )}
-      </aside>
-
-      {/* ─────────────────────────────── Board */}
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <header className={`flex items-center justify-between px-6 py-4 border-b ${t.border} flex-shrink-0`}>
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="min-w-0">
-              <h1 className={`text-lg font-semibold truncate ${t.textPrimary}`}>
-                {project?.title ?? "Flow Project Board"}
-              </h1>
-              <p className={`text-xs mt-0.5 ${t.textMuted}`}>
-                {project
-                  ? `${tasks.length} task${tasks.length === 1 ? "" : "s"} across ${columns.length} column${columns.length === 1 ? "" : "s"}`
-                  : "Pick a project to see its board"}
-              </p>
-            </div>
-
-            {/* The sub-project switcher lives next to the project title: pick a
-                division of the project, or create a new one. */}
             {project && (
               <SubprojectSwitcher
                 subprojects={subprojects}
@@ -299,135 +284,243 @@ export default function FlowProjectBoard() {
                 tokens={t}
               />
             )}
-          </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={toggle}
-              className={`p-1.5 rounded-lg border transition-colors ${t.btnOutline}`}
-              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-            </button>
             {project && (
-              <>
-                <Button
-                  onClick={() => setSettingsOpen(true)}
-                  variant="outline"
-                  size="sm"
-                  title="Manage the project: team, edit its details, or delete it"
-                  className={`h-8 text-xs ${t.btnOutline}`}
-                >
-                  <Settings className="w-3.5 h-3.5 mr-1.5" />
-                  Manage ({(project.memberIds ?? []).length})
-                </Button>
-                <Button
-                  onClick={() => setAddColumnOpen(true)}
-                  variant="outline"
-                  size="sm"
-                  className={`h-8 text-xs ${t.btnOutline}`}
-                >
-                  <Settings2 className="w-3.5 h-3.5 mr-1.5" /> Add Column
-                </Button>
-                <Button
-                  onClick={() => columns.length > 0 && setNewTaskColumn(columns[0].id)}
-                  size="sm"
-                  disabled={columns.length === 0}
-                  className="bg-[#4233e0] hover:bg-[#2a1fb0] text-white h-8 text-xs"
-                >
-                  <Plus className="w-3.5 h-3.5 mr-1.5" /> New Task
-                </Button>
-              </>
+              <Segmented
+                label="View"
+                tone="pick"
+                value={view}
+                onChange={setView}
+                options={[{ value: "board", label: "Board" }, { value: "list", label: "List" }]}
+              />
             )}
           </div>
-        </header>
+
+          <div className="now-board-bar-right">
+            {(project || mayCreate) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className="now-icon-btn" aria-label="Project options">
+                    <MoreHorizontal className="h-5 w-5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className={`${t.selectContent} min-w-[220px]`}>
+                  {project && (
+                    <>
+                      <DropdownMenuItem onClick={() => setSettingsOpen(true)} className="cursor-pointer">
+                        <Settings className="mr-2 h-4 w-4" /> Manage project ({(project.memberIds ?? []).length})
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setAddColumnOpen(true)} className="cursor-pointer">
+                        <Columns3 className="mr-2 h-4 w-4" /> Add column
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setNewSubprojectOpen(true)} className="cursor-pointer">
+                        <Layers className="mr-2 h-4 w-4" /> New sub-project
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {project && mayCreate && <DropdownMenuSeparator />}
+                  {mayCreate && (
+                    <DropdownMenuItem onClick={() => setNewProjectOpen(true)} className="cursor-pointer">
+                      <FolderPlus className="mr-2 h-4 w-4" /> New project
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {project && (
+              <button
+                type="button"
+                className="now-btn lime lg"
+                disabled={columns.length === 0}
+                onClick={() => columns.length > 0 && setNewTaskColumn(columns[0].id)}
+              >
+                New task
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ───────────────────────── Nothing to show yet */}
+        {projectsLoading && (
+          <div className="now-card items-center py-14 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> Loading your projects
+          </div>
+        )}
 
         {!activeId && !projectsLoading && (
-          <div className={`flex-1 flex flex-col items-center justify-center gap-2 ${t.textMuted}`}>
-            <p className="text-sm">No projects yet.</p>
-            <p className="text-xs">
-              {mayCreate
-                ? "Create one from the sidebar to get started."
-                : "You will see a project here once you are added to one."}
+          <div className="now-card items-center py-14 text-center">
+            <div className="now-lede">No projects yet</div>
+            <p className="now-muted" style={{ maxWidth: 420 }}>
+              {filterType !== "all"
+                ? "No project of this type. Choose another type in the project picker."
+                : mayCreate
+                  ? "Create your first project and its board appears here."
+                  : "You will see a project here once you are added to one."}
             </p>
+            {mayCreate && filterType === "all" && (
+              <button type="button" className="now-btn lime lg" onClick={() => setNewProjectOpen(true)}>
+                New project
+              </button>
+            )}
           </div>
         )}
 
         {activeId && boardLoading && (
-          <div className={`flex-1 flex items-center justify-center gap-2 text-sm ${t.textMuted}`}>
-            <Loader2 className="w-4 h-4 animate-spin" /> Loading board...
+          <div className="now-card items-center py-14 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> Loading the board
           </div>
         )}
 
-        {activeId && !boardLoading && (
-          <div className="flex-1 overflow-x-auto overflow-y-hidden">
-            <DragDropContext onDragEnd={onDragEnd}>
-              <div className="flex gap-4 p-6 h-full min-w-max">
+        {activeId && !boardLoading && project && (
+          <>
+            {/* ───────────────────── The four figures */}
+            <section className="now-stat-strip" aria-label="Project summary">
+              <div>
+                <div className="now-stat-label">Health</div>
+                <div className={`now-stat-value${atRisk ? " now-warn" : ""}`}>
+                  {stats.total === 0 ? "No tasks" : atRisk ? "At risk" : "On track"}
+                </div>
+                <div className="now-stat-label">
+                  {stats.total === 0 ? "Add the first one" : atRisk ? healthNote : "Nothing overdue"}
+                </div>
+              </div>
+              <div>
+                <div className="now-stat-label">Progress</div>
+                <div className="now-stat-value">{stats.progress}%</div>
+                <div className="now-bar" style={{ marginTop: 6 }} aria-hidden="true">
+                  <span style={{ width: `${stats.progress}%` }} />
+                </div>
+              </div>
+              <div>
+                <div className="now-stat-label">Due this week</div>
+                <div className="now-stat-value">{stats.dueThisWeek}</div>
+                <div className="now-stat-label">in the next 7 days</div>
+              </div>
+              <div>
+                <div className="now-stat-label">My load</div>
+                <div className="now-stat-value">{stats.mine} task{stats.mine === 1 ? "" : "s"}</div>
+                <div className="now-stat-label">
+                  {stats.mineOverdue > 0 ? `${stats.mineOverdue} of them overdue` : "open and assigned to you"}
+                </div>
+              </div>
+            </section>
+
+            {stats.oldestOverdue && (
+              <WingmanBanner
+                action={<Link href="/wingman" className="now-btn indigo sm">Ask Wingman</Link>}
+              >
+                {stats.overdue === 1 ? "One task is overdue" : `${stats.overdue} tasks are overdue`}
+                {stats.overdue === 1 ? ": " : ". The oldest is "}
+                <strong>{stats.oldestOverdue.title}</strong>, due {formatDate(stats.oldestOverdue.dueDate)}.
+              </WingmanBanner>
+            )}
+
+            {/* ───────────────────── Board */}
+            {view === "board" && (
+              <section className="now-board" aria-label="Board">
+                <DragDropContext onDragEnd={onDragEnd}>
+                  <div className="now-board-cols">
+                    {columns.map(col => {
+                      const colTasks = tasksByColumn.get(col.id) ?? [];
+                      return (
+                        <div key={col.id} className="now-board-col">
+                          <ColumnHeader
+                            column={col}
+                            count={colTasks.length}
+                            onRename={(id, name) => updateColumn.mutate({ id, name })}
+                            onDelete={id => {
+                              if (confirm("Delete this column? Its tasks move to the previous column.")) {
+                                deleteColumn.mutate({ id });
+                              }
+                            }}
+                            tokens={t}
+                          />
+                          <Droppable droppableId={String(col.id)}>
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.droppableProps}
+                                className={`now-board-drop${snapshot.isDraggingOver ? " over" : ""}`}
+                              >
+                                {colTasks.map((task, index) => (
+                                  <TaskCard
+                                    key={task.id}
+                                    task={task}
+                                    index={index}
+                                    users={users as any[]}
+                                    myId={myId}
+                                    onOpen={() => setOpenTaskId(task.id)}
+                                  />
+                                ))}
+                                {provided.placeholder}
+                              </div>
+                            )}
+                          </Droppable>
+                          <button type="button" className="now-add-task" onClick={() => setNewTaskColumn(col.id)}>
+                            + Add task
+                          </button>
+                        </div>
+                      );
+                    })}
+                    {columns.length === 0 && (
+                      <div className="now-card items-center py-10 text-center" style={{ flex: "1 1 auto" }}>
+                        <p className="now-muted">This board has no columns yet.</p>
+                        <button type="button" className="now-btn ink sm" onClick={() => setAddColumnOpen(true)}>
+                          Add column
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </DragDropContext>
+              </section>
+            )}
+
+            {/* ───────────────────── List */}
+            {view === "list" && (
+              <section className="now-card flush" aria-label="Task list">
+                {tasks.length === 0 && <p className="now-muted pb-4">No tasks yet.</p>}
                 {columns.map(col => {
                   const colTasks = tasksByColumn.get(col.id) ?? [];
+                  if (colTasks.length === 0) return null;
                   return (
-                    <div key={col.id} className="flex flex-col w-72 flex-shrink-0">
-                      <ColumnHeader
-                        column={col}
-                        count={colTasks.length}
-                        onRename={(id, name) => updateColumn.mutate({ id, name })}
-                        onDelete={id => {
-                          if (confirm("Delete this column? Its tasks move to the previous column.")) {
-                            deleteColumn.mutate({ id });
-                          }
-                        }}
-                        onAddTask={() => setNewTaskColumn(col.id)}
-                        tokens={t}
-                      />
-                      <Droppable droppableId={String(col.id)}>
-                        {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.droppableProps}
-                            className={`flex-1 min-h-[120px] rounded-xl p-2 overflow-y-auto transition-colors ${
-                              snapshot.isDraggingOver ? t.dragOver : `${t.surface} border ${t.border}`
-                            }`}
+                    <div key={col.id} className="now-list-group">
+                      <div className="now-list-head">
+                        <span>{col.name}</span>
+                        <span className="now-board-count">{colTasks.length}</span>
+                      </div>
+                      {colTasks.map(task => {
+                        const tag = taskTag(task);
+                        const assignee = (users as any[]).find(u => u.id === task.assignedTo);
+                        return (
+                          <button
+                            key={task.id}
+                            type="button"
+                            className="now-list-row"
+                            onClick={() => setOpenTaskId(task.id)}
                           >
-                            {colTasks.map((task, index) => (
-                              <TaskCard
-                                key={task.id}
-                                task={task}
-                                index={index}
-                                users={users as any[]}
-                                onOpen={() => setOpenTaskId(task.id)}
-                                tokens={t}
-                                theme={theme}
-                              />
-                            ))}
-                            {provided.placeholder}
-                            {colTasks.length === 0 && !snapshot.isDraggingOver && (
-                              <button
-                                onClick={() => setNewTaskColumn(col.id)}
-                                className={`w-full flex flex-col items-center justify-center h-24 text-xs ${t.emptyIcon} hover:opacity-80`}
+                            <span className={`now-kcard-title${tag.tone === "done" ? " done" : ""}`}>{task.title}</span>
+                            <span className={`now-kcard-tag ${tag.tone}`}>{tag.label}</span>
+                            {assignee ? (
+                              <span
+                                title={assignee.name}
+                                className={`now-kavatar${myId && assignee.id === myId ? " me" : ""}`}
                               >
-                                <Plus className="w-5 h-5 mb-1 opacity-50" />
-                                Add task
-                              </button>
+                                {initialsOf(assignee)}
+                              </span>
+                            ) : (
+                              <span className="now-kavatar none" aria-label="Nobody assigned" />
                             )}
-                          </div>
-                        )}
-                      </Droppable>
+                          </button>
+                        );
+                      })}
                     </div>
                   );
                 })}
-
-                <button
-                  onClick={() => setAddColumnOpen(true)}
-                  className={`flex flex-col items-center justify-center w-56 flex-shrink-0 rounded-xl border border-dashed transition-opacity ${t.borderDashed} ${t.emptyIcon} hover:opacity-80`}
-                >
-                  <Plus className="w-6 h-6 mb-1" />
-                  <span className="text-xs">Add column</span>
-                </button>
-              </div>
-            </DragDropContext>
-          </div>
+              </section>
+            )}
+          </>
         )}
-      </main>
+      </div>
 
       <NewProjectModal
         open={newProjectOpen}
@@ -485,16 +578,15 @@ export default function FlowProjectBoard() {
         users={users as any[]}
         tokens={t}
       />
-    </div>
+    </LayoutWrapper>
   );
 }
 
 // ─────────────────────────────────────────────────────── Sub-project switcher
 /**
- * The control next to the project title for choosing which sub-project's board
- * to show, and for creating a new one. A project (a brand, say) is divided into
- * sub-projects — Social Media, Development, SEO, Marketing — each with its own
- * cards on the shared columns.
+ * Chooses which sub-project's board to show, and creates a new one. A project
+ * (a brand, say) is divided into sub-projects — Social Media, Development, SEO,
+ * Marketing — each with its own cards on the shared columns.
  */
 function SubprojectSwitcher({
   subprojects, activeId, onSelect, onCreate, onDelete, tokens,
@@ -510,13 +602,10 @@ function SubprojectSwitcher({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button
-          className={`flex items-center gap-1.5 h-8 px-3 rounded-lg border text-xs font-medium ${tokens.btnOutline}`}
-          title="Switch sub-project, or create a new one"
-        >
-          <Layers className="w-3.5 h-3.5 flex-shrink-0" />
-          <span className="max-w-[160px] truncate">{active?.name ?? "Sub-project"}</span>
-          <ChevronDown className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
+        <button type="button" className="now-pick" title="Switch sub-project, or create a new one">
+          <Layers className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
+          <span className="truncate">{active?.name ?? "Sub-project"}</span>
+          <ChevronDown className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className={`${tokens.selectContent} min-w-[220px]`}>
@@ -524,34 +613,31 @@ function SubprojectSwitcher({
           <DropdownMenuItem
             key={s.id}
             onClick={() => onSelect(s.id)}
-            className="cursor-pointer flex items-center justify-between gap-2 group"
+            className="group flex cursor-pointer items-center justify-between gap-2"
           >
-            <span className="flex items-center gap-2 min-w-0">
-              <Check className={`w-3.5 h-3.5 flex-shrink-0 ${s.id === activeId ? "opacity-100" : "opacity-0"}`} />
+            <span className="flex min-w-0 items-center gap-2">
+              <Check className={`h-3.5 w-3.5 shrink-0 ${s.id === activeId ? "opacity-100" : "opacity-0"}`} />
               <span
-                className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: s.color || "#6366f1" }}
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: s.color || "#4233e0" }}
               />
               <span className="truncate">{s.name}</span>
             </span>
             {subprojects.length > 1 && (
               <button
                 onClick={e => { e.stopPropagation(); onDelete(s); }}
-                className="p-0.5 rounded opacity-0 group-hover:opacity-70 hover:!opacity-100 hover:text-red-500 flex-shrink-0"
+                className="shrink-0 rounded p-0.5 opacity-0 hover:!opacity-100 hover:text-red-500 focus-visible:opacity-100 group-hover:opacity-70"
                 title="Delete sub-project"
                 aria-label={`Delete ${s.name}`}
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="h-3.5 w-3.5" />
               </button>
             )}
           </DropdownMenuItem>
         ))}
         {subprojects.length > 0 && <DropdownMenuSeparator />}
-        <DropdownMenuItem
-          onClick={onCreate}
-          className="cursor-pointer text-[#4233e0] focus:text-[#4233e0]"
-        >
-          <Plus className="w-3.5 h-3.5 mr-2" /> New sub-project
+        <DropdownMenuItem onClick={onCreate} className="cursor-pointer">
+          <Plus className="mr-2 h-3.5 w-3.5" /> New sub-project
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -560,16 +646,17 @@ function SubprojectSwitcher({
 
 // ───────────────────────────────────────────────────────────── Column header
 function ColumnHeader({
-  column, count, onRename, onDelete, onAddTask, tokens,
+  column, count, onRename, onDelete, tokens,
 }: {
   column: any; count: number;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
-  onAddTask: () => void;
   tokens: any;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(column.name);
+
+  useEffect(() => { setName(column.name); }, [column.name]);
 
   const save = () => {
     const trimmed = name.trim();
@@ -579,56 +666,45 @@ function ColumnHeader({
   };
 
   return (
-    <div className="flex items-center justify-between mb-3 px-1">
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: column.color }} />
-        {editing ? (
-          <input
-            autoFocus
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onBlur={save}
-            onKeyDown={e => {
-              if (e.key === "Enter") save();
-              if (e.key === "Escape") { setName(column.name); setEditing(false); }
-            }}
-            className={`rounded px-2 py-0.5 text-sm w-full outline-none border ${tokens.input}`}
-          />
-        ) : (
-          <span
-            className={`text-sm font-semibold truncate cursor-pointer ${tokens.textPrimary}`}
-            onClick={() => setEditing(true)}
-            title="Click to rename"
-          >
-            {column.name}
-          </span>
-        )}
-        <span className={`text-xs ${tokens.textMuted} flex-shrink-0`}>{count}</span>
-      </div>
-
-      <div className="flex items-center gap-1">
-        <button onClick={onAddTask} className={`p-1 rounded ${tokens.btnGhost}`} title="Add task">
-          <Plus className="w-3.5 h-3.5" />
-        </button>
+    <div className="now-board-col-head">
+      {editing ? (
+        <input
+          autoFocus
+          value={name}
+          aria-label="Column name"
+          onChange={e => setName(e.target.value)}
+          onBlur={save}
+          onKeyDown={e => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") { setName(column.name); setEditing(false); }
+          }}
+          className="now-input"
+          style={{ minHeight: 36, height: 36, padding: "0 10px", fontSize: 15 }}
+        />
+      ) : (
+        <span className="truncate font-bold">{column.name}</span>
+      )}
+      <span className="flex shrink-0 items-center gap-1">
+        <span className="now-board-count">{count}</span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className={`p-1 rounded ${tokens.btnGhost}`} aria-label="Column actions">
-              <MoreHorizontal className="w-3.5 h-3.5" />
+            <button type="button" className="now-board-more" aria-label={`${column.name} column options`}>
+              <MoreHorizontal className="h-4 w-4" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className={tokens.selectContent}>
+          <DropdownMenuContent align="end" className={tokens.selectContent}>
             <DropdownMenuItem onClick={() => setEditing(true)} className="cursor-pointer">
-              <Pencil className="w-3.5 h-3.5 mr-2" /> Rename
+              <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => onDelete(column.id)}
               className="cursor-pointer text-red-500 focus:text-red-500"
             >
-              <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete Column
+              <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete column
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
+      </span>
     </div>
   );
 }

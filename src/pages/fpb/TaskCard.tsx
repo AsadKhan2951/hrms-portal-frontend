@@ -1,21 +1,25 @@
 import { Draggable } from "@hello-pangea/dnd";
-import { Calendar, CheckSquare, MessageSquare } from "lucide-react";
-import { PRIORITY_COLORS, formatDate, initialOf, type Priority } from "./shared";
+import { CheckSquare, MessageSquare } from "lucide-react";
+import { initialsOf, isTaskDone, taskTag } from "./shared";
 
 /** One task card on a project's board. */
 export function TaskCard({
-  task, index, users, onOpen, tokens, theme,
+  task, index, users, onOpen, myId,
 }: {
   task: any; index: number; users: any[];
-  onOpen: () => void; tokens: any; theme: string;
+  onOpen: () => void;
+  myId?: string | null;
+  /** Kept so older callers still compile; the card reads the portal theme itself. */
+  tokens?: any; theme?: string;
 }) {
   const subtasks: any[] = task.subtasks ?? [];
   const doneSubs = subtasks.filter(s => s.completed).length;
   const assignee = users.find((u: any) => u.id === task.assignedTo);
   const memberIds: string[] = task.memberIds ?? [];
   const extra = memberIds.filter(id => id !== task.assignedTo);
-  const overdue =
-    task.dueDate && !task.completed && new Date(task.dueDate) < new Date(new Date().toDateString());
+  const tag = taskTag(task);
+  const done = isTaskDone(task);
+  const loud = !done && (task.priority === "urgent" || task.priority === "high");
 
   return (
     <Draggable draggableId={String(task.id)} index={index}>
@@ -25,73 +29,46 @@ export function TaskCard({
           {...provided.draggableProps}
           {...provided.dragHandleProps}
           onClick={onOpen}
-          className={`group border rounded-lg p-3 mb-2 cursor-pointer transition-all select-none ${tokens.card} ${
-            snapshot.isDragging
-              ? "border-[#4233e0]/60 shadow-lg shadow-[#4233e0]/10 rotate-1"
-              : `${tokens.border} hover:border-[#8f86ff]/50`
-          }`}
+          onKeyDown={event => {
+            if (event.key === "Enter") onOpen();
+          }}
+          aria-label={`${task.title}. ${tag.label}`}
+          className={`now-kcard${snapshot.isDragging ? " dragging" : ""}`}
         >
-          <p className={`text-sm leading-snug mb-2 ${
-            task.completed ? `line-through ${tokens.textMuted}` : tokens.textPrimary
-          }`}>
-            {task.title}
-          </p>
+          <div className={`now-kcard-title${done ? " done" : ""}`}>{task.title}</div>
 
-          <div className="flex items-center gap-2 flex-wrap mb-2">
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium capitalize ${
-              PRIORITY_COLORS[task.priority as Priority] ?? PRIORITY_COLORS.medium
-            }`}>
-              {task.priority}
-            </span>
-            {task.dueDate && (
-              <span className={`flex items-center gap-1 text-[10px] ${
-                overdue ? "text-red-400" : tokens.textMuted
-              }`}>
-                <Calendar className="w-2.5 h-2.5" /> {formatDate(task.dueDate)}
-              </span>
-            )}
-            {subtasks.length > 0 && (
-              <span className={`flex items-center gap-1 text-[10px] ${tokens.textMuted}`}>
-                <CheckSquare className="w-2.5 h-2.5" /> {doneSubs}/{subtasks.length}
-              </span>
-            )}
-            {task.commentCount > 0 && (
-              <span className={`flex items-center gap-1 text-[10px] ${tokens.textMuted}`}>
-                <MessageSquare className="w-2.5 h-2.5" /> {task.commentCount}
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className={`text-[10px] uppercase tracking-wide ${tokens.textMuted}`}>
-              {String(task.status).replace("_", " ")}
-            </span>
-            <div className="flex -space-x-1.5">
-              {assignee && (
-                <span
-                  title={assignee.name}
-                  className={`w-5 h-5 rounded-full bg-gradient-to-br from-[#4233e0] to-[#8f86ff] flex items-center justify-center text-[9px] text-white font-bold border ${
-                    theme === "dark" ? "border-[#171c15]" : "border-white"
-                  }`}
-                >
-                  {initialOf(assignee)}
-                </span>
+          {(loud || subtasks.length > 0 || task.commentCount > 0) && (
+            <div className="now-kcard-meta">
+              {loud && <span className="now-pill risk">{task.priority}</span>}
+              {subtasks.length > 0 && (
+                <span><CheckSquare className="h-3.5 w-3.5" aria-hidden="true" /> {doneSubs}/{subtasks.length}</span>
               )}
+              {task.commentCount > 0 && (
+                <span><MessageSquare className="h-3.5 w-3.5" aria-hidden="true" /> {task.commentCount}</span>
+              )}
+            </div>
+          )}
+
+          <div className="now-kcard-foot">
+            <span className={`now-kcard-tag ${tag.tone}`}>{tag.label}</span>
+            <span className="now-kavatars">
               {extra.slice(0, 2).map(id => {
-                const u = users.find((x: any) => x.id === id);
+                const member = users.find((x: any) => x.id === id);
                 return (
-                  <span
-                    key={id}
-                    title={u?.name}
-                    className={`w-5 h-5 rounded-full bg-slate-500/60 flex items-center justify-center text-[9px] text-white font-bold border ${
-                      theme === "dark" ? "border-[#171c15]" : "border-white"
-                    }`}
-                  >
-                    {initialOf(u)}
+                  <span key={id} title={member?.name} className="now-kavatar">
+                    {initialsOf(member)}
                   </span>
                 );
               })}
-            </div>
+              {assignee && (
+                <span
+                  title={assignee.name}
+                  className={`now-kavatar${myId && assignee.id === myId ? " me" : ""}`}
+                >
+                  {initialsOf(assignee)}
+                </span>
+              )}
+            </span>
           </div>
         </div>
       )}

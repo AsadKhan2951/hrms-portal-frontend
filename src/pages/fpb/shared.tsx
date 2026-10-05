@@ -66,3 +66,80 @@ export function Avatar({ user, size = 20 }: { user: any; size?: number }) {
     </span>
   );
 }
+
+/** "FH" for Fayyaz Hussain; one letter when there is only one name. */
+export function initialsOf(user: any) {
+  const words = String(user?.name || user?.employeeId || "?").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+}
+
+const DAY_MS = 86400000;
+
+function startOfToday() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+}
+
+function startOfDay(value: string | Date) {
+  const date = new Date(value);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+export function isTaskDone(task: any) {
+  return Boolean(task?.completed) || task?.status === "done";
+}
+
+/** Whole days a task is past its due date; 0 when it is not late. */
+export function daysOverdue(task: any) {
+  if (!task?.dueDate || isTaskDone(task)) return 0;
+  return Math.max(0, Math.round((startOfToday() - startOfDay(task.dueDate)) / DAY_MS));
+}
+
+export type TaskTagTone = "muted" | "late" | "review" | "done";
+
+/** The one line under a card's title: the thing most worth knowing about it. */
+export function taskTag(task: any): { label: string; tone: TaskTagTone } {
+  if (isTaskDone(task)) return { label: "Done", tone: "done" };
+  const late = daysOverdue(task);
+  if (late > 0) return { label: `Overdue ${late} day${late === 1 ? "" : "s"}`, tone: "late" };
+  if (task.status === "blocked") return { label: "Blocked", tone: "late" };
+  if (task.status === "in_review") return { label: "In review", tone: "review" };
+  if (task.dueDate) {
+    const ahead = Math.round((startOfDay(task.dueDate) - startOfToday()) / DAY_MS);
+    if (ahead === 0) return { label: "Due today", tone: "muted" };
+    if (ahead === 1) return { label: "Due tomorrow", tone: "muted" };
+    if (ahead < 7) {
+      return { label: `Due ${new Date(task.dueDate).toLocaleDateString("en-GB", { weekday: "short" })}`, tone: "muted" };
+    }
+    return { label: `Due ${formatDate(task.dueDate)}`, tone: "muted" };
+  }
+  return { label: "No due date", tone: "muted" };
+}
+
+/** The four figures above the board, worked out from the tasks on show. */
+export function boardStats(tasks: any[], myId: string | null) {
+  const open = tasks.filter(task => !isTaskDone(task));
+  const overdue = open.filter(task => daysOverdue(task) > 0);
+  const blocked = open.filter(task => task.status === "blocked");
+  const done = tasks.length - open.length;
+  const dueThisWeek = open.filter(task => {
+    if (!task.dueDate) return false;
+    const ahead = Math.round((startOfDay(task.dueDate) - startOfToday()) / DAY_MS);
+    return ahead >= 0 && ahead < 7;
+  });
+  const mine = myId ? open.filter(task => String(task.assignedTo ?? "") === myId) : [];
+  const oldest = [...overdue].sort((a, b) => startOfDay(a.dueDate) - startOfDay(b.dueDate))[0] ?? null;
+  return {
+    total: tasks.length,
+    done,
+    progress: tasks.length === 0 ? 0 : Math.round((done / tasks.length) * 100),
+    overdue: overdue.length,
+    blocked: blocked.length,
+    dueThisWeek: dueThisWeek.length,
+    mine: mine.length,
+    mineOverdue: mine.filter(task => daysOverdue(task) > 0).length,
+    oldestOverdue: oldest,
+  };
+}
