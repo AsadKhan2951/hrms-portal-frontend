@@ -16,6 +16,7 @@ import Time from "./pages/Time";
 import Requests from "./pages/Requests";
 import Wingman from "./pages/Wingman";
 import RequestsReview from "./pages/admin/RequestsReview";
+import Leads from "./pages/admin/Leads";
 import Forms from "./pages/Forms";
 import Projects from "./pages/Projects";
 import Notifications from "./pages/Notifications";
@@ -150,6 +151,9 @@ function Router() {
       </Route>
       <Route path="/admin/organisation">
         {() => <ProtectedRoute component={Organisation} />}
+      </Route>
+      <Route path="/admin/leads">
+        {() => <ProtectedRoute component={Leads} />}
       </Route>
       <Route path="/admin/requests">
         {() => <ProtectedRoute component={RequestsReview} />}

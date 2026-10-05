@@ -27,6 +27,7 @@ import {
   FileText,
   Building2,
   ClipboardCheck,
+  UserPlus,
 } from "lucide-react";
 import { Link, Redirect } from "wouter";
 import { hasRank, isAnyHead, roleLabel, type Role } from "@/lib/roles";
@@ -86,6 +87,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     // they can reach the shell for. The backend refuses them anyway; this is
     // so they are not shown doors that will not open.
     { icon: Home, label: "Overview", path: "/admin", minRole: "head_of_ops" },
+    { icon: UserPlus, label: "Sign-ups", path: "/admin/leads", minRole: "head_of_ops" },
     { icon: Users, label: "My Team", path: "/admin/team", minRole: "dept_head" },
     { icon: Users, label: "Employees", path: "/admin/employees", minRole: "head_of_ops" },
     { icon: Building2, label: "Organisation", path: "/admin/organisation", minRole: "head_of_ops" },
