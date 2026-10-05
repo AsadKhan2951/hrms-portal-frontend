@@ -2,10 +2,10 @@ import { useState, type ComponentType, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { LogOut, Menu, Moon, Search, Sun, X } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
-import { fileUrl } from "@/lib/api";
+import AvatarFace from "@/components/now/AvatarFace";
 
 /**
- * The Now workspace shell: a dark rail on the left with a lime active item,
+ * The Now workspace shell: a dark rail on the left with an orange active item,
  * which turns into a bottom tab bar on phones. Shared by the employee layout
  * and the admin layout so both sides of the portal look the same; each layout
  * only decides which menu items it passes in.
@@ -31,14 +31,14 @@ type NowShellProps = {
   onLogout: () => void;
   /** Sticky bar above the page, e.g. the admin search and notifications. */
   topbar?: ReactNode;
+  /**
+   * The employee rail is the short one from the design: logo, the main items
+   * and the user chip. Theme and sign-out live on the account page instead.
+   * The longer admin rail keeps its search box, theme switch and logout.
+   */
+  compact?: boolean;
   children: ReactNode;
 };
-
-function initialsOf(name?: string | null) {
-  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
-}
 
 export default function NowShell({
   items,
@@ -49,6 +49,7 @@ export default function NowShell({
   footerItems = [],
   onLogout,
   topbar,
+  compact = false,
   children,
 }: NowShellProps) {
   const [location] = useLocation();
@@ -58,7 +59,9 @@ export default function NowShell({
 
   // First item whose path matches wins, so two entries that share a path
   // (the admin menu has a couple) do not both light up.
-  const activeIndex = items.findIndex(item => item.path === location);
+  const exact = items.findIndex(item => item.path === location);
+  // A page under a menu item (the full attendance log under Time) keeps that item lit.
+  const activeIndex = exact >= 0 ? exact : items.findIndex(item => item.path !== "/" && location.startsWith(`${item.path}/`));
   const visible = items
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => item.label.toLowerCase().includes(query.trim().toLowerCase()));
@@ -68,7 +71,6 @@ export default function NowShell({
   const hiddenUnread = items
     .filter(item => !tabPaths.includes(item.path))
     .reduce((sum, item) => sum + (item.count ?? 0), 0);
-  const avatarSrc = fileUrl(user?.avatar);
 
   const navList = (onPick?: () => void) => (
     <nav className="now-rail-nav" aria-label="Main">
@@ -92,8 +94,10 @@ export default function NowShell({
     </nav>
   );
 
-  const footer = (onPick?: () => void) => (
-    <div className="now-rail-foot">
+  // The phone menu always offers theme and sign-out: the account page is one
+  // more tap away there, and nobody should have to hunt for the way out.
+  const footer = (onPick?: () => void, full = !compact) => (
+    <div className={`now-rail-foot${full || footerItems.length > 0 ? " ruled" : ""}`}>
       {footerItems.map(item => {
         const Icon = item.icon;
         return (
@@ -103,22 +107,24 @@ export default function NowShell({
           </Link>
         );
       })}
-      <button type="button" className="now-rail-link" onClick={toggleTheme}>
-        {theme === "dark" ? <Sun /> : <Moon />}
-        <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
-      </button>
-      <button type="button" className="now-rail-link danger" onClick={onLogout}>
-        <LogOut />
-        <span>Logout</span>
-      </button>
+      {full && (
+        <>
+          <button type="button" className="now-rail-link" onClick={toggleTheme}>
+            {theme === "dark" ? <Sun /> : <Moon />}
+            <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+          </button>
+          <button type="button" className="now-rail-link danger" onClick={onLogout}>
+            <LogOut />
+            <span>Logout</span>
+          </button>
+        </>
+      )}
       <Link
         href="/account"
         className={`now-rail-user${location === "/account" ? " active" : ""}`}
         onClick={onPick}
       >
-        <span className="now-avatar">
-          {avatarSrc ? <img src={avatarSrc} alt="" /> : initialsOf(user?.name)}
-        </span>
+        <AvatarFace avatar={user?.avatar} name={user?.name} size={36} />
         <span style={{ minWidth: 0 }}>
           <strong className="truncate">{user?.name || "My account"}</strong>
           <small className="truncate">{user?.position || roleLabel || ""}</small>
@@ -144,7 +150,7 @@ export default function NowShell({
       <aside className="now-rail">
         <img className="now-rail-logo" src="/new-logo-v2.png" alt="Now" />
         {badge && <span className="now-rail-badge">{badge}</span>}
-        {search}
+        {!compact && search}
         {navList()}
         {footer()}
       </aside>
@@ -158,16 +164,16 @@ export default function NowShell({
         <div className="now-sheet">
           <img className="now-rail-logo" src="/new-logo-v2.png" alt="Now" />
           {badge && <span className="now-rail-badge">{badge}</span>}
-          {search}
+          {!compact && search}
           {navList(() => setSheetOpen(false))}
-          {footer(() => setSheetOpen(false))}
+          {footer(() => setSheetOpen(false), true)}
         </div>
       )}
 
       <nav className="now-tabbar" aria-label="Main">
         {tabs.map(item => {
           const Icon = item.icon;
-          const active = !sheetOpen && item.path === location;
+          const active = !sheetOpen && items[activeIndex]?.path === item.path;
           return (
             <Link
               key={item.path}

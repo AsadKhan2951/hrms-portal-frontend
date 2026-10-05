@@ -1,275 +1,185 @@
-import { useEffect, useMemo, useState } from "react";
-import { trpc } from "@/lib/trpc";
-import LayoutWrapper from "@/components/LayoutWrapper";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Megaphone, Calendar, Loader2, List, Grid3x3, Check } from "lucide-react";
-import { format, isToday, isThisWeek, isBefore, startOfWeek } from "date-fns";
+import { useMemo, useState } from "react";
+import { Link } from "wouter";
+import { format, isBefore, isThisWeek, isToday, startOfWeek } from "date-fns";
 import { toast } from "sonner";
+import NowPage, { Segmented, WingmanMark } from "@/components/now/NowPage";
+import { trpc } from "@/lib/trpc";
 
-type ViewMode = "list" | "grid";
-type FilterMode = "today" | "week" | "previous";
+type Filter = "today" | "week" | "earlier";
 
+/** News: company announcements, newest first, with the dates worth knowing alongside. */
 export default function Announcements() {
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [filterMode, setFilterMode] = useState<FilterMode>("today");
-  const [readAnnouncements, setReadAnnouncements] = useState<string[]>([]);
-
   const utils = trpc.useUtils();
-  const { data: announcements = [], isLoading } = trpc.dashboard.getAnnouncements.useQuery();
+  // Opens on this week, or on earlier posts when this week has none yet.
+  const [chosen, setFilter] = useState<Filter | null>(null);
+
+  const { data: announcements = [], isLoading, isError } = trpc.dashboard.getAnnouncements.useQuery();
   const { data: readIds = [] } = trpc.dashboard.getAnnouncementReadIds.useQuery();
-  const markReadMutation = trpc.dashboard.markAnnouncementRead.useMutation({
-    onSuccess: async () => {
-      await utils.dashboard.getAnnouncementReadIds.invalidate();
-    },
+  const fourWeeks = trpc.time.getFourWeeks.useQuery();
+  const meetings = trpc.meetings.getMyMeetings.useQuery();
+  const events = trpc.calendar.getMyEvents.useQuery();
+  const leaves = trpc.leaves.getMyLeaves.useQuery();
+
+  const markRead = trpc.dashboard.markAnnouncementRead.useMutation({
+    onSuccess: () => utils.dashboard.getAnnouncementReadIds.invalidate(),
+    onError: () => toast.error("Could not mark it as read"),
   });
 
-  // Filter announcements based on selected filter
-  const filteredAnnouncements = useMemo(() => {
-    return announcements.filter((announcement) => {
-      const announcementDate = new Date(announcement.createdAt);
+  const read = useMemo(() => new Set((readIds as unknown[]).filter(Boolean).map(String)), [readIds]);
+  const toFix = (fourWeeks.data?.toFix ?? []) as { date: string }[];
 
-      switch (filterMode) {
-        case "today":
-          return isToday(announcementDate);
-        case "week":
-          return isThisWeek(announcementDate, { weekStartsOn: 1 });
-        case "previous":
-          return isBefore(announcementDate, startOfWeek(new Date(), { weekStartsOn: 1 }));
-        default:
-          return true;
-      }
+  const filter: Filter =
+    chosen ?? ((announcements as any[]).some(item => isThisWeek(new Date(item.createdAt), { weekStartsOn: 1 })) ? "week" : "earlier");
+
+  const shown = useMemo(() => {
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+    const sorted = [...(announcements as any[])].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    return sorted.filter(item => {
+      const date = new Date(item.createdAt);
+      if (filter === "today") return isToday(date);
+      if (filter === "week") return isThisWeek(date, { weekStartsOn: 1 });
+      return isBefore(date, weekStart);
     });
-  }, [announcements, filterMode]);
+  }, [announcements, filter]);
 
-  // Show most recent announcement by default if today filter has no results
-  const displayAnnouncements = useMemo(() => {
-    if (filterMode === "today" && filteredAnnouncements.length === 0) {
-      return announcements.length ? [announcements[0]] : [];
+  // The next few things on this person's own calendar.
+  const dates = useMemo(() => {
+    const now = new Date();
+    const list: { when: Date; title: string; detail: string }[] = [];
+    for (const meeting of (meetings.data ?? []) as any[]) {
+      if (meeting.status === "cancelled") continue;
+      list.push({ when: new Date(meeting.startTime), title: meeting.title, detail: `Meeting · ${format(new Date(meeting.startTime), "HH:mm")}` });
     }
-    return filteredAnnouncements;
-  }, [announcements, filteredAnnouncements, filterMode]);
-
-  useEffect(() => {
-    setReadAnnouncements(readIds.filter(Boolean).map((id) => String(id)));
-  }, [readIds]);
-
-  const markAsRead = (id: string | number) => {
-    const idValue = String(id);
-    if (!readAnnouncements.includes(idValue)) {
-      setReadAnnouncements([...readAnnouncements, idValue]);
-      markReadMutation.mutate({ announcementId: String(id) }, {
-        onSuccess: () => {
-          toast.success("Announcement marked as read");
-        },
-        onError: () => {
-          toast.error("Failed to mark announcement as read");
-        },
-      });
+    for (const event of (events.data ?? []) as any[]) {
+      const type = String(event.eventType ?? "event");
+      list.push({ when: new Date(event.startTime), title: event.title, detail: type.charAt(0).toUpperCase() + type.slice(1) });
     }
-  };
-
-  const getPriorityBadge = (priority: string) => {
-    const config: Record<string, { variant: "default" | "secondary" | "destructive", color: string }> = {
-      high: { variant: "destructive", color: "bg-red-500/10 text-red-500" },
-      medium: { variant: "default", color: "bg-blue-500/10 text-blue-500" },
-      low: { variant: "secondary", color: "bg-gray-500/10 text-gray-500" },
-    };
-
-    const { variant, color } = config[priority] || config.low;
-
-    return (
-      <Badge variant={variant} className={`capitalize ${color}`}>
-        {priority}
-      </Badge>
-    );
-  };
-
-  const getPriorityColor = (priority: string) => {
-    const colors: Record<string, string> = {
-      high: "border-l-red-500",
-      medium: "border-l-blue-500",
-      low: "border-l-gray-500",
-    };
-    return colors[priority] || "border-l-gray-500";
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
+    for (const leave of (leaves.data ?? []) as any[]) {
+      if (leave.status !== "approved") continue;
+      const type = String(leave.leaveType);
+      list.push({ when: new Date(leave.startDate), title: `${type.charAt(0).toUpperCase() + type.slice(1)} leave starts`, detail: "Approved" });
+    }
+    return list
+      .filter(item => !Number.isNaN(item.when.getTime()) && item.when >= now)
+      .sort((a, b) => a.when.getTime() - b.when.getTime())
+      .slice(0, 6);
+  }, [meetings.data, events.data, leaves.data]);
 
   return (
-    <LayoutWrapper>
-      <div className="space-y-4">
-        {/* Header with View Toggle and Filters */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">Announcements</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Stay updated with company news and important updates
-            </p>
-          </div>
+    <NowPage title="News" subtitle="Company announcements and updates">
+      <Segmented
+        label="Posted"
+        value={filter}
+        onChange={setFilter}
+        options={[
+          { value: "today", label: "Today" },
+          { value: "week", label: "This week" },
+          { value: "earlier", label: "Earlier" },
+        ]}
+      />
 
-          <div className="flex items-center gap-2">
-            {/* View Mode Toggle */}
-            <div className="flex items-center gap-1 border rounded-lg p-1">
-              <Button
-                variant={viewMode === "list" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("list")}
-                className="h-8 w-8 p-0"
-              >
-                <List className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={viewMode === "grid" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("grid")}
-                className="h-8 w-8 p-0"
-              >
-                <Grid3x3 className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {/* Filter Buttons */}
-            <div className="flex items-center gap-1 border rounded-lg p-1">
-              <Button
-                variant={filterMode === "today" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setFilterMode("today")}
-              >
-                Today
-              </Button>
-              <Button
-                variant={filterMode === "week" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setFilterMode("week")}
-              >
-                Week
-              </Button>
-              <Button
-                variant={filterMode === "previous" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setFilterMode("previous")}
-              >
-                Previous
-              </Button>
-            </div>
-          </div>
+      <div className="now-cols">
+        <div className="now-col-main" style={{ gap: 16 }}>
+          {isError ? (
+            <section className="now-card now-warn">Could not load announcements. Refresh to try again.</section>
+          ) : isLoading ? (
+            <section className="now-card now-muted">Loading...</section>
+          ) : shown.length === 0 ? (
+            <section className="now-card now-muted">
+              {filter === "today" ? "Nothing posted today." : filter === "week" ? "Nothing posted this week." : "No earlier announcements."}
+            </section>
+          ) : (
+            shown.map((item, index) => {
+              const id = String(item.id);
+              const urgent = item.priority === "high";
+              const lead = index === 0;
+              return (
+                <article key={id} className="now-card" style={{ padding: lead ? 28 : "24px 28px", gap: lead ? 12 : 8 }}>
+                  <div className="now-small now-muted" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+                    {urgent && <span className="now-pill warn-soft" style={{ textTransform: "none" }}>Action needed</span>}
+                    <span>{format(new Date(item.createdAt), "d MMMM, HH:mm")}</span>
+                    {!read.has(id) && <span style={{ color: "var(--primary)", fontWeight: 700 }}>New</span>}
+                  </div>
+                  <h2
+                    style={{
+                      fontFamily: "var(--font-display)",
+                      fontWeight: 700,
+                      fontSize: lead ? 26 : 20,
+                      lineHeight: 1.15,
+                      letterSpacing: lead ? "-0.02em" : "-0.01em",
+                    }}
+                  >
+                    {item.title}
+                  </h2>
+                  <p style={{ maxWidth: 640, fontSize: lead ? 16 : 15, whiteSpace: "pre-wrap" }} className={lead ? "" : "now-body-2"}>
+                    {item.content}
+                  </p>
+                  {/* Only said on an urgent post, and only when this person really has a record to fix. */}
+                  {urgent && toFix.length > 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        marginTop: 4,
+                        padding: "12px 12px 12px 16px",
+                        borderRadius: 14,
+                        background: "var(--now-indigo-tint)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <WingmanMark className="shrink-0 text-[var(--now-indigo)]" />
+                        <div>
+                          You have {toFix.length} attendance {toFix.length === 1 ? "record" : "records"} to fix:{" "}
+                          {toFix.map(d => format(new Date(`${d.date}T00:00:00`), "d MMMM")).join(", ")}.
+                        </div>
+                      </div>
+                      <Link href={`/attendance?fix=${toFix[0].date}`} className="now-btn indigo sm">
+                        Fix it now
+                      </Link>
+                    </div>
+                  )}
+                  {!read.has(id) && (
+                    <button
+                      type="button"
+                      className="now-link"
+                      style={{ alignSelf: "flex-start" }}
+                      disabled={markRead.isPending}
+                      onClick={() => markRead.mutate({ announcementId: id })}
+                    >
+                      Mark as read
+                    </button>
+                  )}
+                </article>
+              );
+            })
+          )}
         </div>
 
-        {/* Announcements Display */}
-        {displayAnnouncements && displayAnnouncements.length > 0 ? (
-          <div className={viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-3"}>
-            {displayAnnouncements.map((announcement) => {
-              const isRead = readAnnouncements.includes(String(announcement.id));
-              
-              return viewMode === "list" ? (
-                // List View
-                <Card
-                  key={announcement.id}
-                  className={`p-4 border-l-4 ${getPriorityColor(announcement.priority || "low")} ${isRead ? 'opacity-60' : ''}`}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-3 flex-1">
-                      <div className="p-2 bg-primary/10 rounded-lg">
-                        <Megaphone className="h-4 w-4 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-sm truncate">{announcement.title}</h3>
-                          {getPriorityBadge(announcement.priority || "low")}
-                          {isRead && (
-                            <Badge variant="outline" className="bg-green-500/10 text-green-500">
-                              <Check className="h-3 w-3 mr-1" />
-                              Read
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                          <Calendar className="h-3 w-3" />
-                          {format(new Date(announcement.createdAt), "MMM dd, yyyy 'at' HH:mm")}
-                        </div>
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {announcement.content}
-                        </p>
-                      </div>
-                    </div>
-                    {!isRead && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => markAsRead(announcement.id)}
-                        className="shrink-0"
-                      >
-                        Mark Read
-                      </Button>
-                    )}
-                  </div>
-                </Card>
-              ) : (
-                // Grid View
-                <Card
-                  key={announcement.id}
-                  className={`p-4 border-l-4 ${getPriorityColor(announcement.priority || "low")} ${isRead ? 'opacity-60' : ''} flex flex-col`}
-                >
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      <Megaphone className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-sm line-clamp-2 mb-2">{announcement.title}</h3>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {getPriorityBadge(announcement.priority || "low")}
-                        {isRead && (
-                          <Badge variant="outline" className="bg-green-500/10 text-green-500">
-                            <Check className="h-3 w-3 mr-1" />
-                            Read
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <p className="text-sm text-muted-foreground line-clamp-3 mb-3 flex-1">
-                    {announcement.content}
-                  </p>
-                  
-                  <div className="flex items-center justify-between pt-3 border-t">
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Calendar className="h-3 w-3" />
-                      {format(new Date(announcement.createdAt), "MMM dd, yyyy")}
-                    </div>
-                    {!isRead && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => markAsRead(announcement.id)}
-                        className="h-7 text-xs"
-                      >
-                        Mark Read
-                      </Button>
-                    )}
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        ) : (
-          <Card className="p-12">
-            <div className="text-center text-muted-foreground">
-              <Megaphone className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No announcements for {filterMode === "today" ? "today" : filterMode === "week" ? "this week" : "previous periods"}</p>
-              <p className="text-sm mt-1">Check back later for updates</p>
-            </div>
-          </Card>
-        )}
+        <section className="now-card now-col-side">
+          <h2 className="now-h2">Dates to know</h2>
+          {dates.length === 0 ? (
+            <div className="now-muted">Nothing coming up on your calendar.</div>
+          ) : (
+            dates.map((item, index) => (
+              <div key={index} className="now-dated">
+                <div className="when">{format(item.when, "EEE d")}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="now-row-title">{item.title}</div>
+                  <div className="now-row-sub">{item.detail}</div>
+                </div>
+              </div>
+            ))
+          )}
+          <Link href="/calendar" className="now-link">
+            Open calendar
+          </Link>
+        </section>
       </div>
-    </LayoutWrapper>
+    </NowPage>
   );
 }

@@ -199,7 +199,7 @@ export function NotesWidget({ open, onOpenChange, hideTrigger }: NotesWidgetProp
       {!hideTrigger && (
         <Button
           onClick={() => setIsOpen(!isOpen)}
-          className="fixed bottom-24 max-[900px]:bottom-40 right-6 z-40 h-12 w-12 rounded-full shadow-premium-lg bg-[#10140f] hover:bg-[#1c221a] text-[#c8f169]"
+          className="fixed bottom-24 max-[900px]:bottom-40 right-6 z-40 h-12 w-12 rounded-full shadow-premium-lg bg-[#10140f] hover:bg-[#1c221a] text-[#ff9068]"
           size="icon"
         >
           {isOpen ? <X className="h-5 w-5" /> : <StickyNote className="h-5 w-5" />}

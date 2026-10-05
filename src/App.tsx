@@ -12,6 +12,10 @@ import Payslips from "./pages/Payslips";
 import Announcements from "./pages/Announcements";
 import Account from "./pages/Account";
 import Attendance from "./pages/Attendance";
+import Time from "./pages/Time";
+import Requests from "./pages/Requests";
+import Wingman from "./pages/Wingman";
+import RequestsReview from "./pages/admin/RequestsReview";
 import Forms from "./pages/Forms";
 import Projects from "./pages/Projects";
 import Notifications from "./pages/Notifications";
@@ -94,7 +98,17 @@ function Router() {
         {() => <ProtectedRoute component={Account} />}
       </Route>
       <Route path="/attendance">
+        {() => <ProtectedRoute component={Time} />}
+      </Route>
+      {/* The earlier attendance page, kept in full: calendar, list and trends. */}
+      <Route path="/attendance/log">
         {() => <ProtectedRoute component={Attendance} />}
+      </Route>
+      <Route path="/requests">
+        {() => <ProtectedRoute component={Requests} />}
+      </Route>
+      <Route path="/wingman">
+        {() => <ProtectedRoute component={Wingman} />}
       </Route>
       <Route path="/forms">
         {() => <ProtectedRoute component={Forms} />}
@@ -136,6 +150,9 @@ function Router() {
       </Route>
       <Route path="/admin/organisation">
         {() => <ProtectedRoute component={Organisation} />}
+      </Route>
+      <Route path="/admin/requests">
+        {() => <ProtectedRoute component={RequestsReview} />}
       </Route>
       <Route path="/admin/team">
         {() => <ProtectedRoute component={TeamOverview} />}

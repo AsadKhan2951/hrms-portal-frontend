@@ -1,183 +1,224 @@
-import { Card } from "@/components/ui/card";
-import LayoutWrapper from "@/components/LayoutWrapper";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Download, FileText, DollarSign, TrendingUp } from "lucide-react";
-import { format } from "date-fns";
-import { trpc } from "@/lib/trpc";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Link } from "wouter";
+import { addMonths, format } from "date-fns";
+import NowPage, { WingmanMark } from "@/components/now/NowPage";
 import { fileUrl } from "@/lib/api";
+import { trpc } from "@/lib/trpc";
 
+const money = (value: unknown) => Number(value || 0).toLocaleString();
+const periodOf = (payslip: any) =>
+  payslip?.month && payslip?.year ? format(new Date(payslip.year, payslip.month - 1, 1), "MMMM yyyy") : "Payslip";
+
+/**
+ * The next payday, taken from the day of the month the last payslip was paid.
+ * Null when nothing has been paid yet, because then there is no pattern to
+ * read a date from.
+ */
+function nextPayday(payslips: any[], now: Date): Date | null {
+  const lastPaid = payslips.find(p => p.paidAt);
+  if (!lastPaid) return null;
+  let next = addMonths(new Date(lastPaid.paidAt), 1);
+  for (let guard = 0; next < now && guard < 24; guard += 1) next = addMonths(next, 1);
+  return next;
+}
+
+/** Pay: the latest payslip with amounts hidden until asked for, then the history. */
 export default function Payslips() {
-  const { data: payslips = [], isLoading } = trpc.dashboard.getPayslips.useQuery();
-  const latestPayslip = useMemo(() => payslips[0], [payslips]);
+  const { data: payslips = [], isLoading, isError } = trpc.dashboard.getPayslips.useQuery();
+  const fourWeeks = trpc.time.getFourWeeks.useQuery();
+  const [shown, setShown] = useState(false);
+
+  const now = useMemo(() => new Date(), []);
+  const monthRange = useMemo(() => ({ startDate: new Date(now.getFullYear(), now.getMonth(), 1), endDate: now }), [now]);
+  const overtime = trpc.timeTracking.getOvertimeByRange.useQuery(monthRange);
+  const leaves = trpc.leaves.getMyLeaves.useQuery();
+
+  const latest = (payslips as any[])[0];
+  const latestPdf = fileUrl(latest?.documentUrl);
+  const amount = (value: unknown) => (shown ? money(value) : "••••••");
+  const payday = nextPayday(payslips as any[], now);
+  const toFix = (fourWeeks.data?.toFix ?? []) as { date: string; reason: string }[];
+
+  const overtimeHours = ((overtime.data ?? []) as any[]).reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
+  // Approved leave days that fall in the current month.
+  const leaveDays = useMemo(() => {
+    let total = 0;
+    for (const leave of (leaves.data ?? []) as any[]) {
+      if (leave.status !== "approved") continue;
+      const end = new Date(leave.endDate);
+      for (let day = new Date(leave.startDate), guard = 0; day <= end && guard < 366; day.setDate(day.getDate() + 1), guard += 1) {
+        if (day.getMonth() === now.getMonth() && day.getFullYear() === now.getFullYear()) total += 1;
+      }
+    }
+    return total;
+  }, [leaves.data, now]);
 
   return (
-    <LayoutWrapper>
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">Payslips</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          View and download your salary payslips
-        </p>
-      </div>
-
-      {/* Latest Payslip Summary */}
-      {latestPayslip ? (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-500/10 rounded-lg">
-                <DollarSign className="h-5 w-5 text-blue-500" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Basic Salary</p>
-                <p className="text-xl font-bold">PKR {Number(latestPayslip.basicSalary || 0).toLocaleString()}</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-500/10 rounded-lg">
-                <TrendingUp className="h-5 w-5 text-green-500" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Allowances</p>
-                <p className="text-xl font-bold">PKR {Number(latestPayslip.allowances || 0).toLocaleString()}</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-500/10 rounded-lg">
-                <TrendingUp className="h-5 w-5 text-red-500 rotate-180" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Deductions</p>
-                <p className="text-xl font-bold">PKR {Number(latestPayslip.deductions || 0).toLocaleString()}</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4 bg-primary text-primary-foreground">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/10 rounded-lg">
-                <DollarSign className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-xs opacity-90">Net Salary</p>
-                <p className="text-xl font-bold">PKR {Number(latestPayslip.netSalary || 0).toLocaleString()}</p>
-              </div>
-            </div>
-          </Card>
-        </div>
-      ) : (
-        <Card className="p-6 text-center text-muted-foreground">
-          {isLoading ? "Loading payslips..." : "No payslip data available yet"}
-        </Card>
-      )}
-
-      {/* Payslip History */}
-      <Card>
-        <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold">Payslip History</h2>
-        </div>
-
-        <div className="p-4">
-          <div className="space-y-3">
+    <NowPage title="Pay" subtitle="Payslips and what goes into them">
+      <div className="now-cols">
+        <div className="now-col-main">
+          <section className="now-card roomy" style={{ gap: 20 }}>
             {isLoading ? (
-              <div className="text-center text-muted-foreground py-6">Loading payslips...</div>
-            ) : payslips.length === 0 ? (
-              <div className="text-center text-muted-foreground py-6">No payslips found</div>
+              <div className="now-muted">Loading your payslips...</div>
+            ) : isError ? (
+              <div className="now-warn">Could not load your payslips. Refresh to try again.</div>
+            ) : !latest ? (
+              <div>
+                <div className="now-lede">No payslip yet</div>
+                <div className="now-muted" style={{ marginTop: 6 }}>
+                  Your first payslip appears here when HR issues it.
+                </div>
+              </div>
             ) : (
-              payslips.map((payslip: any) => (
-                <Card key={payslip.id} className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 bg-muted rounded-lg">
-                        <FileText className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-lg">
-                          {payslip.month && payslip.year
-                            ? format(new Date(payslip.year, payslip.month - 1, 1), "MMMM yyyy")
-                            : "Payslip"}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          {payslip.paidAt
-                            ? `Paid on ${format(new Date(payslip.paidAt), "MMMM dd, yyyy")}`
-                            : payslip.createdAt
-                              ? `Created on ${format(new Date(payslip.createdAt), "MMMM dd, yyyy")}`
-                              : "Payment date unavailable"}
-                        </p>
-                      </div>
+              <>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+                  <div>
+                    <div className="now-small now-muted">
+                      Latest payslip · {periodOf(latest)} ·{" "}
+                      {latest.paidAt ? `paid ${format(new Date(latest.paidAt), "d MMMM")}` : "not paid yet"}
                     </div>
-
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <p className="text-sm text-muted-foreground">Net Salary</p>
-                        <p className="text-xl font-bold">
-                          PKR {Number(payslip.netSalary || 0).toLocaleString()}
-                        </p>
-                      </div>
-
-                      <Badge variant={payslip.paidAt ? "default" : "secondary"} className="capitalize">
-                        {payslip.paidAt ? "paid" : "pending"}
-                      </Badge>
-
-                      {fileUrl(payslip.documentUrl) ? (
-                        <Button variant="outline" size="sm" asChild>
-                          <a
-                            href={fileUrl(payslip.documentUrl) as string}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <Download className="h-4 w-4 mr-2" />
-                            Download
-                          </a>
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled
-                          title="No PDF attached to this payslip"
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Download
-                        </Button>
-                      )}
+                    <div
+                      style={{ marginTop: 6, fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 44, lineHeight: 1, letterSpacing: "-0.03em" }}
+                      aria-live="polite"
+                    >
+                      PKR {amount(latest.netSalary)}
+                    </div>
+                    <div className="now-body-2" style={{ marginTop: 6 }}>
+                      {shown ? "Net pay." : "Net pay. Amounts stay hidden until you choose to show them."}
                     </div>
                   </div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button type="button" className="now-btn ground md" aria-pressed={shown} onClick={() => setShown(value => !value)}>
+                      {shown ? "Hide amounts" : "Show amounts"}
+                    </button>
+                    {latestPdf ? (
+                      <a className="now-btn ink md" href={latestPdf} target="_blank" rel="noreferrer">
+                        Download PDF
+                      </a>
+                    ) : (
+                      <button type="button" className="now-btn ink md" disabled title="No PDF is attached to this payslip">
+                        Download PDF
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-                  {/* Breakdown */}
-                  <div className="mt-4 pt-4 border-t grid grid-cols-3 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Basic Salary</p>
-                      <p className="font-semibold">PKR {Number(payslip.basicSalary || 0).toLocaleString()}</p>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px 40px" }}>
+                  <div>
+                    <div className="now-small now-muted" style={{ paddingBottom: 8 }}>
+                      Earnings
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Allowances</p>
-                      <p className="font-semibold text-green-600">
-                        + PKR {Number(payslip.allowances || 0).toLocaleString()}
-                      </p>
+                    <div className="now-row tight">
+                      <span>Basic salary</span>
+                      <span className="tabular-nums">{amount(latest.basicSalary)}</span>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Deductions</p>
-                      <p className="font-semibold text-red-600">
-                        - PKR {Number(payslip.deductions || 0).toLocaleString()}
-                      </p>
+                    <div className="now-row tight">
+                      <span>Allowances</span>
+                      <span className="tabular-nums">{amount(latest.allowances)}</span>
                     </div>
                   </div>
-                </Card>
-              ))
+                  <div>
+                    <div className="now-small now-muted" style={{ paddingBottom: 8 }}>
+                      Deductions
+                    </div>
+                    <div className="now-row tight">
+                      <span>Total deductions</span>
+                      <span className="tabular-nums">{amount(latest.deductions)}</span>
+                    </div>
+                    <div className="now-row tight">
+                      <span>Days present</span>
+                      <span className="tabular-nums">
+                        {latest.presentDays || 0} of {latest.workingDays || 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
-          </div>
+          </section>
+
+          <section className="now-card flush">
+            <h2 className="now-h2" style={{ marginBottom: 8 }}>
+              History
+            </h2>
+            {(payslips as any[]).length === 0 ? (
+              <div className="now-row now-muted">{isLoading ? "Loading..." : "No payslips yet."}</div>
+            ) : (
+              (payslips as any[]).map(payslip => {
+                const pdf = fileUrl(payslip.documentUrl);
+                return (
+                  <div key={payslip.id} className="now-row tight">
+                    <div style={{ minWidth: 0 }}>
+                      <div className="now-row-title">{periodOf(payslip)}</div>
+                      <div className="now-row-sub">
+                        {payslip.paidAt ? `Paid ${format(new Date(payslip.paidAt), "d MMMM")}` : "Not paid yet"}
+                        {payslip.workingDays ? ` · ${payslip.workingDays} working days` : ""}
+                        {shown ? ` · PKR ${money(payslip.netSalary)}` : ""}
+                      </div>
+                    </div>
+                    {pdf ? (
+                      <a className="now-btn text sm" href={pdf} target="_blank" rel="noreferrer" aria-label={`Download ${periodOf(payslip)} payslip`}>
+                        Download
+                      </a>
+                    ) : (
+                      <span className="now-small now-muted" style={{ padding: "0 12px" }}>
+                        No PDF
+                      </span>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </section>
         </div>
-      </Card>
-    </div>
-    </LayoutWrapper>
+
+        <div className="now-col-side">
+          {toFix.length > 0 && (
+            <section className="now-card tinted">
+              <div className="now-eyebrow">
+                <WingmanMark size={16} className="text-[var(--now-indigo)]" />
+                <span>Wingman · {format(now, "MMMM")} pay</span>
+              </div>
+              <div className="now-lede">
+                {toFix.length === 1 ? "One open day could come off your pay." : `${toFix.length} open days could come off your pay.`}
+              </div>
+              <div className="now-body-2">
+                {toFix.map(d => format(new Date(`${d.date}T00:00:00`), "d MMMM")).join(", ")}{" "}
+                {toFix.length === 1 ? "has" : "have"} no usable clock-out. Payroll cannot count a day until it is corrected.
+              </div>
+              <Link href={`/attendance?fix=${toFix[0].date}`} className="now-btn indigo sm" style={{ alignSelf: "flex-start" }}>
+                Fix it now
+              </Link>
+            </section>
+          )}
+
+          <section className="now-card" style={{ gap: 12 }}>
+            <h2 className="now-h2">Next payday</h2>
+            <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 28, lineHeight: 1.1 }}>
+              {payday ? format(payday, "d MMMM") : "Not set yet"}
+            </div>
+            {payday ? (
+              <div className="now-small now-muted">Based on when your last payslip was paid.</div>
+            ) : (
+              <div className="now-small now-muted">It shows here once a payslip has been marked paid.</div>
+            )}
+            <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 12, borderTop: "1px solid var(--secondary)" }}>
+              <span className="now-muted">Overtime this month</span>
+              <span style={{ fontWeight: 600 }}>{Math.round(overtimeHours * 10) / 10} h</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span className="now-muted">Leave taken this month</span>
+              <span style={{ fontWeight: 600 }}>
+                {leaveDays} {leaveDays === 1 ? "day" : "days"}
+              </span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span className="now-muted">Days to fix</span>
+              <span style={{ fontWeight: 600, color: toFix.length ? "var(--now-warn)" : undefined }}>{toFix.length}</span>
+            </div>
+          </section>
+        </div>
+      </div>
+    </NowPage>
   );
 }

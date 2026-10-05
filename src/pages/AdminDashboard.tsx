@@ -240,7 +240,7 @@ export default function AdminDashboard() {
             </div>
             <Button
               variant="outline"
-              className="self-start md:self-auto border-0 bg-[#c8f169] text-[#10140f] hover:bg-[#b9e455] hover:text-[#10140f]"
+              className="self-start md:self-auto border-0 bg-[linear-gradient(135deg,#ff4b1f,#ff9068)] text-[#10140f] hover:brightness-95 hover:text-[#10140f]"
               onClick={refreshAll}
             >
               <RefreshCcw className="mr-2 h-4 w-4" />

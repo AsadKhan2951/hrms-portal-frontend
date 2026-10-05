@@ -1,336 +1,272 @@
-import { useState, useEffect, useMemo, useRef } from "react";
-import LayoutWrapper from "@/components/LayoutWrapper";
-import { useAuth } from "@/_core/hooks/useAuth";
-import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Loader2, Paperclip, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { format, isToday } from "date-fns";
+import { ArrowUp, Loader2, Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { useAuth } from "@/_core/hooks/useAuth";
+import AvatarFace from "@/components/now/AvatarFace";
+import NowPage from "@/components/now/NowPage";
+import { trpc } from "@/lib/trpc";
 
+const stamp = (value: Date | string) => {
+  const date = new Date(value);
+  return isToday(date) ? format(date, "HH:mm") : format(date, "d MMM, HH:mm");
+};
+
+/** Chat: the team channel and direct messages, side by side. */
 export default function Chat() {
   const { user } = useAuth();
-  const [message, setMessage] = useState("");
-  const [selectedUser, setSelectedUser] = useState<string | null>(null);
-  const [attachments, setAttachments] = useState<File[]>([]);
-  const scrollRef = useRef<HTMLDivElement>(null);
   const utils = trpc.useUtils();
-  const currentUserId = user?.id ? String(user.id) : null;
+  const me = user?.id ? String(user.id) : null;
+  // null is the team channel; otherwise the id of the person in a direct message.
+  const [selected, setSelected] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const endRef = useRef<HTMLDivElement>(null);
 
-  const { data: users, isLoading: usersLoading } = trpc.dashboard.getUsers.useQuery();
-  const { data: messages, isLoading: messagesLoading } = trpc.chat.getMessages.useQuery(
+  const { data: users = [], isLoading: usersLoading } = trpc.dashboard.getUsers.useQuery();
+  const { data: messages = [], isLoading: messagesLoading, isError } = trpc.chat.getMessages.useQuery(
     { limit: 100 },
-    { refetchInterval: 3000 } // Poll every 3 seconds for new messages
+    { refetchInterval: 3000 }
   );
-  const markReadMutation = trpc.chat.markRead.useMutation();
-
-  const sendMutation = trpc.chat.send.useMutation({
+  const markRead = trpc.chat.markRead.useMutation();
+  const send = trpc.chat.send.useMutation({
     onSuccess: () => {
       setMessage("");
+      setAttachments([]);
       utils.chat.getMessages.invalidate();
-      scrollToBottom();
     },
-    onError: (error) => {
-      toast.error(error.message);
-    },
+    onError: (error: any) => toast.error(error.message || "Could not send the message"),
   });
 
-  const scrollToBottom = () => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+  const all = messages as any[];
+  const people = (users as any[]).filter(person => String(person.id) !== me);
+  const nameOf = (id: unknown) => (users as any[]).find(person => String(person.id) === String(id))?.name ?? "Someone";
+
+  // A message belongs to the team channel when it has no recipient, and to a
+  // direct thread when it is between the two people in it.
+  const inThread = (msg: any, other: string | null) => {
+    const recipient = msg.recipientId ? String(msg.recipientId) : null;
+    const sender = String(msg.senderId);
+    if (other === null) return recipient === null;
+    return (sender === other && recipient === me) || (sender === me && recipient === other);
   };
+
+  const thread = useMemo(
+    () => all.filter(msg => inThread(msg, selected)).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [all, selected, me]
+  );
+
+  const unread = useMemo(
+    () => all.filter(msg => !msg.isRead && String(msg.senderId) !== me && (!msg.recipientId || String(msg.recipientId) === me)),
+    [all, me]
+  );
+  const unreadIn = (other: string | null) => unread.filter(msg => inThread(msg, other)).length;
+  const lastIn = (other: string | null) => {
+    const list = all.filter(msg => inThread(msg, other));
+    if (list.length === 0) return null;
+    return list.reduce((latest, msg) => (new Date(msg.createdAt) > new Date(latest.createdAt) ? msg : latest));
+  };
+  const preview = (other: string | null, fallback: string) => {
+    const last = lastIn(other);
+    if (!last) return fallback;
+    return `${String(last.senderId) === me ? "You" : String(nameOf(last.senderId)).split(" ")[0]}: ${last.message}`;
+  };
+
+  // Opening a thread reads it. Each message is marked once.
+  const marked = useRef(new Set<string>());
+  useEffect(() => {
+    for (const msg of unread) {
+      const id = String(msg.id);
+      if (!inThread(msg, selected) || marked.current.has(id)) continue;
+      marked.current.add(id);
+      markRead.mutate({ messageId: msg.id }, { onSuccess: () => utils.chat.getMessages.invalidate() });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unread, selected]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    endRef.current?.scrollIntoView({ block: "nearest" });
+  }, [thread.length, selected]);
 
-  const handleSend = () => {
-    if (!message.trim() && attachments.length === 0) return;
-    
-    let messageText = message.trim();
-    if (attachments.length > 0) {
-      const fileNames = attachments.map(f => f.name).join(", ");
-      messageText += (messageText ? "\n" : "") + `📎 Attachments: ${fileNames}`;
-    }
-    
-    sendMutation.mutate({
-      message: messageText,
-      recipientId: (selectedUser as any) || undefined,
-    });
-    setAttachments([]);
+  const submit = () => {
+    if (send.isPending) return;
+    let text = message.trim();
+    if (!text && attachments.length === 0) return;
+    // Files are not uploaded by chat yet; their names are sent so the other person knows to ask.
+    if (attachments.length > 0) text += `${text ? "\n" : ""}Attachments: ${attachments.map(file => file.name).join(", ")}`;
+    send.mutate({ message: text, recipientId: selected || undefined });
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setAttachments([...attachments, ...Array.from(e.target.files)]);
-    }
-  };
-
-  const removeAttachment = (index: number) => {
-    setAttachments(attachments.filter((_, i) => i !== index));
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const allMessages = messages ?? [];
-  const filteredMessages = selectedUser
-    ? allMessages.filter(
-        (msg) =>
-          String(msg.senderId) === String(selectedUser) ||
-          String(msg.recipientId) === String(selectedUser)
-      )
-    : allMessages;
-
-  const orderedMessages = useMemo(() => {
-    return [...filteredMessages].sort((a, b) => {
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    });
-  }, [filteredMessages]);
-
-  const unreadMessages = useMemo(() => {
-    if (!currentUserId) return [];
-    return allMessages.filter((msg) => {
-      if (msg.isRead) return false;
-      if (String(msg.senderId) === currentUserId) return false;
-      const recipientId = msg.recipientId ? String(msg.recipientId) : null;
-      return !recipientId || recipientId === currentUserId;
-    });
-  }, [allMessages, currentUserId]);
-
-  const unreadTotal = unreadMessages.length;
-
-  const unreadBySender = useMemo(() => {
-    const map = new Map<string, number>();
-    unreadMessages.forEach((msg) => {
-      const senderId = String(msg.senderId);
-      map.set(senderId, (map.get(senderId) ?? 0) + 1);
-    });
-    return map;
-  }, [unreadMessages]);
-
-  useEffect(() => {
-    if (!currentUserId) return;
-    if (unreadMessages.length === 0) return;
-
-    const relevantUnread = selectedUser
-      ? unreadMessages.filter((msg) => String(msg.senderId) === String(selectedUser))
-      : unreadMessages;
-
-    relevantUnread.forEach((msg) => {
-      markReadMutation.mutate({ messageId: msg.id });
-    });
-  }, [currentUserId, unreadMessages, selectedUser, markReadMutation]);
-
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase();
-  };
-
-  if (usersLoading || messagesLoading) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
+  const title = selected ? nameOf(selected) : "Team chat";
+  const selectedPerson = selected ? (users as any[]).find(person => String(person.id) === selected) : null;
 
   return (
-    <LayoutWrapper>
-    <div className="flex gap-3 h-[calc(100vh-8rem)] overflow-hidden">
-      {/* Users List */}
-      <Card className="w-80 p-4 h-full flex flex-col overflow-hidden">
-        <h2 className="text-lg font-semibold mb-4">Team Members</h2>
-        <ScrollArea className="flex-1 min-h-0 pr-2">
-          <div className="space-y-2">
-            <button
-              onClick={() => setSelectedUser(null)}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                selectedUser === null
-                  ? "bg-primary text-primary-foreground"
-                  : "hover:bg-muted"
-              }`}
-            >
-              <Avatar>
-                <AvatarFallback>ALL</AvatarFallback>
-              </Avatar>
-              <div className="text-left flex-1">
-                <div className="font-medium flex items-center gap-2">
-                  All Messages
-                  {unreadTotal > 0 && (
-                    <span className="h-2 w-2 rounded-full bg-red-500" />
-                  )}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {messages?.length || 0} messages
-                </div>
-              </div>
-              {unreadTotal > 0 && (
-                <span className="min-w-[20px] px-2 py-0.5 text-xs rounded-full bg-red-500 text-white text-center">
-                  {unreadTotal}
-                </span>
-              )}
-            </button>
-
-            {users?.map((user) => (
-              <button
-                key={user.id}
-                onClick={() => setSelectedUser(user.id as any)}
-                className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                  selectedUser === user.id
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted"
-                }`}
-              >
-                <Avatar>
-                  <AvatarFallback>{getInitials(user.name || "U")}</AvatarFallback>
-                </Avatar>
-                <div className="text-left flex-1 min-w-0">
-                  <div className="font-medium">{user.name}</div>
-                  <div className="text-sm text-muted-foreground truncate">
-                    {user.email}
-                  </div>
-                </div>
-                {unreadBySender.get(String(user.id)) ? (
-                  <span className="min-w-[20px] px-2 py-0.5 text-xs rounded-full bg-red-500 text-white text-center">
-                    {unreadBySender.get(String(user.id))}
-                  </span>
-                ) : null}
-              </button>
-            ))}
+    <NowPage title="Chat" subtitle="Team and direct messages">
+      <div className="now-cols" style={{ alignItems: "stretch" }}>
+        <section className="now-card" style={{ flex: "1 1 280px", minWidth: 0, padding: "16px 12px", gap: 4 }}>
+          <div className="now-small now-muted" style={{ padding: "8px 12px 4px" }}>
+            Channels
           </div>
-        </ScrollArea>
-      </Card>
+          <button
+            type="button"
+            className="now-chat-row"
+            aria-current={selected === null ? "true" : undefined}
+            onClick={() => setSelected(null)}
+          >
+            <span className="now-chat-hash" aria-hidden="true">
+              #
+            </span>
+            <span style={{ flex: "1 1 0", minWidth: 0 }}>
+              <span className="now-row-title" style={{ display: "block" }}>
+                Team chat
+              </span>
+              <span className="now-row-sub truncate" style={{ display: "block" }}>
+                {preview(null, "Everyone in the company")}
+              </span>
+            </span>
+            {unreadIn(null) > 0 && <span className="now-chat-new">{unreadIn(null)} new</span>}
+          </button>
 
-      {/* Chat Area */}
-      <Card className="flex-1 flex flex-col h-full overflow-hidden">
-        <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold">
-            {selectedUser
-              ? users?.find((u) => String(u.id) === String(selectedUser))?.name || "Chat"
-              : "Team Chat"}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {selectedUser ? "Direct message" : "Group conversation"}
-          </p>
-        </div>
-
-        {/* Messages */}
-        <ScrollArea className="flex-1 min-h-0 p-4" ref={scrollRef}>
-          <div className="space-y-4">
-            {orderedMessages.length > 0 ? (
-              orderedMessages.map((msg) => {
-                const sender = users?.find((u) => String(u.id) === String(msg.senderId));
-                const isCurrentUser = currentUserId
-                  ? String(msg.senderId) === currentUserId
-                  : false;
-
+          <div className="now-small now-muted" style={{ padding: "16px 12px 4px" }}>
+            Direct messages
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 520, overflowY: "auto" }}>
+            {usersLoading ? (
+              <div className="now-muted" style={{ padding: "8px 12px" }}>
+                Loading people...
+              </div>
+            ) : people.length === 0 ? (
+              <div className="now-muted" style={{ padding: "8px 12px" }}>
+                Nobody else is on the portal yet.
+              </div>
+            ) : (
+              people.map(person => {
+                const id = String(person.id);
+                const count = unreadIn(id);
                 return (
-                  <div
-                    key={msg.id}
-                    className={`flex gap-3 ${isCurrentUser ? "flex-row-reverse" : ""}`}
+                  <button
+                    key={id}
+                    type="button"
+                    className="now-chat-row"
+                    aria-current={selected === id ? "true" : undefined}
+                    onClick={() => setSelected(id)}
                   >
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="text-xs">
-                        {getInitials(sender?.name || "U")}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div
-                      className={`flex flex-col ${isCurrentUser ? "items-end" : "items-start"}`}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-medium">{sender?.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {format(new Date(msg.createdAt), "HH:mm")}
-                        </span>
+                    <AvatarFace avatar={person.avatar} name={person.name} size={36} />
+                    <span style={{ flex: "1 1 0", minWidth: 0 }}>
+                      <span className="now-row-title" style={{ display: "block" }}>
+                        {person.name}
+                      </span>
+                      <span className="now-row-sub truncate" style={{ display: "block" }}>
+                        {preview(id, person.position || person.department || person.email || "")}
+                      </span>
+                    </span>
+                    {count > 0 && <span className="now-chat-new">{count} new</span>}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </section>
+
+        <section className="now-card" style={{ flex: "3 1 520px", minWidth: 0, gap: 20, minHeight: 640 }}>
+          <div style={{ paddingBottom: 16, borderBottom: "1px solid var(--secondary)" }}>
+            <h2 className="now-h2">{title}</h2>
+            <div className="now-row-sub">
+              {selected
+                ? [selectedPerson?.position, selectedPerson?.department].filter(Boolean).join(" · ") || "Direct message"
+                : `Team channel · ${(users as any[]).length} ${(users as any[]).length === 1 ? "person" : "people"}`}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 18, flex: "1 1 auto", maxHeight: 560, overflowY: "auto" }} aria-live="polite">
+            {isError ? (
+              <div className="now-warn">Could not load messages. Refresh to try again.</div>
+            ) : messagesLoading ? (
+              <div className="now-muted">Loading messages...</div>
+            ) : thread.length === 0 ? (
+              <div className="now-muted">{selected ? `No messages with ${title} yet.` : "No messages in the team channel yet."}</div>
+            ) : (
+              thread.map(msg => {
+                const mine = String(msg.senderId) === me;
+                const sender = (users as any[]).find(person => String(person.id) === String(msg.senderId));
+                return (
+                  <div key={msg.id} style={{ display: "flex", gap: 12 }}>
+                    <AvatarFace avatar={mine ? user?.avatar : sender?.avatar} name={mine ? user?.name : sender?.name} size={36} />
+                    <div style={{ minWidth: 0 }}>
+                      <div>
+                        <span style={{ fontWeight: 700 }}>{mine ? "You" : sender?.name ?? "Someone"}</span>{" "}
+                        <span className="now-small now-muted">{stamp(msg.createdAt)}</span>
                       </div>
-                      <div
-                        className={`px-4 py-2 rounded-lg max-w-md ${
-                          isCurrentUser
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted"
-                        }`}
-                      >
-                        {msg.message}
-                      </div>
+                      <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{msg.message}</div>
                     </div>
                   </div>
                 );
               })
-            ) : (
-              <div className="text-center text-muted-foreground py-12">
-                No messages yet. Start the conversation!
+            )}
+            <div ref={endRef} />
+          </div>
+
+          <div>
+            {attachments.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                {attachments.map((file, index) => (
+                  <span key={`${file.name}-${index}`} className="now-pill" style={{ display: "inline-flex", alignItems: "center", gap: 6, textTransform: "none" }}>
+                    <Paperclip className="h-3 w-3" />
+                    <span className="truncate" style={{ maxWidth: 160 }}>
+                      {file.name}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${file.name}`}
+                      onClick={() => setAttachments(attachments.filter((_, i) => i !== index))}
+                      style={{ border: 0, background: "transparent", padding: 0, display: "flex" }}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
               </div>
             )}
-          </div>
-        </ScrollArea>
-
-        {/* Input */}
-        <div className="p-4 border-t">
-          {attachments.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-2">
-              {attachments.map((file, index) => (
-                <div key={index} className="flex items-center gap-1 bg-muted px-2 py-1 rounded text-sm">
-                  <Paperclip className="h-3 w-3" />
-                  <span className="truncate max-w-[150px]">{file.name}</span>
-                  <button
-                    onClick={() => removeAttachment(index)}
-                    className="hover:text-destructive"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="flex gap-2">
-            <label htmlFor="file-input" className="cursor-pointer">
-              <Button type="button" variant="outline" size="icon" asChild>
-                <div>
-                  <Paperclip className="h-4 w-4" />
-                </div>
-              </Button>
-            </label>
-            <input
-              id="file-input"
-              type="file"
-              multiple
-              onChange={handleFileChange}
-              className="hidden"
-            />
-            <Input
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type a message..."
-              disabled={sendMutation.isPending}
-            />
-            <Button
-              onClick={handleSend}
-              disabled={!message.trim() || sendMutation.isPending}
-              size="icon"
+            <form
+              className="now-composer soft"
+              onSubmit={event => {
+                event.preventDefault();
+                submit();
+              }}
             >
-              {sendMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </Button>
+              <label htmlFor="chat-msg" className="sr-only-now">
+                Message {title}
+              </label>
+              <input
+                id="chat-msg"
+                type="text"
+                value={message}
+                autoComplete="off"
+                onChange={event => setMessage(event.target.value)}
+                placeholder={`Message ${title}`}
+              />
+              <label htmlFor="chat-files" className="now-icon-btn" style={{ background: "transparent", cursor: "pointer" }} title="Add file names to the message">
+                <Paperclip className="h-5 w-5" />
+                <span className="sr-only-now">Attach files</span>
+              </label>
+              <input
+                id="chat-files"
+                type="file"
+                multiple
+                className="sr-only"
+                onChange={event => {
+                  if (event.target.files) setAttachments([...attachments, ...Array.from(event.target.files)]);
+                  event.target.value = "";
+                }}
+              />
+              <button type="submit" className="now-send" aria-label="Send" disabled={send.isPending || (!message.trim() && attachments.length === 0)}>
+                {send.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.4} />}
+              </button>
+            </form>
           </div>
-        </div>
-      </Card>
-    </div>
-    </LayoutWrapper>
+        </section>
+      </div>
+    </NowPage>
   );
 }

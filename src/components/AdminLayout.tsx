@@ -3,11 +3,11 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { 
-  Users, 
-  FileCheck, 
-  MessageSquareText, 
-  DollarSign, 
+import {
+  Users,
+  FileCheck,
+  MessageSquareText,
+  DollarSign,
   FolderKanban,
   LayoutGrid,
   BarChart3,
@@ -25,7 +25,8 @@ import {
   Settings,
   Mail,
   FileText,
-  Building2
+  Building2,
+  ClipboardCheck,
 } from "lucide-react";
 import { Link, Redirect } from "wouter";
 import { hasRank, isAnyHead, roleLabel, type Role } from "@/lib/roles";
@@ -89,6 +90,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { icon: Users, label: "Employees", path: "/admin/employees", minRole: "head_of_ops" },
     { icon: Building2, label: "Organisation", path: "/admin/organisation", minRole: "head_of_ops" },
     { icon: FileCheck, label: "Leaves", path: "/admin/leaves", minRole: "dept_head" },
+    { icon: ClipboardCheck, label: "Requests", path: "/admin/requests", minRole: "dept_head" },
     { icon: MessageSquareText, label: "Forms", path: "/admin/forms", minRole: "head_of_ops" },
     { icon: DollarSign, label: "Payslips", path: "/admin/payslips", minRole: "head_of_ops" },
     { icon: LayoutGrid, label: "Project Board", path: "/board", minRole: "dept_head" },

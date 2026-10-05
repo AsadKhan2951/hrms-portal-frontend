@@ -1,19 +1,20 @@
 import { useState, useMemo } from "react";
 import { Calendar as BigCalendar, dateFnsLocalizer, View } from "react-big-calendar";
 import { enUS } from "date-fns/locale";
-import { format, parse, startOfWeek, getDay } from "date-fns";
+import { addDays, addMonths, addWeeks, endOfWeek, format, parse, startOfWeek, getDay } from "date-fns";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { trpc } from "../lib/trpc";
 import { Button } from "../components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { useAuth } from "../_core/hooks/useAuth";
 import { toast as showToast } from "sonner";
-import { CalendarIcon, Users, Clock, MapPin, Link as LinkIcon, FileText } from "lucide-react";
-import LayoutWrapper from "@/components/LayoutWrapper";
+import { Clock, MapPin, Link as LinkIcon, FileText } from "lucide-react";
+import { Link } from "wouter";
+import NowPage, { Segmented } from "@/components/now/NowPage";
 
 // Setup localizer for react-big-calendar
 const locales = {
@@ -43,7 +44,7 @@ interface CalendarEvent {
 
 export default function Calendar() {
   const { user } = useAuth();
-  const [view, setView] = useState<View>("month");
+  const [view, setView] = useState<View>("week");
   const [date, setDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [showMeetingDialog, setShowMeetingDialog] = useState(false);
@@ -53,8 +54,9 @@ export default function Calendar() {
   // Fetch meetings and events
   const { data: meetings = [], refetch: refetchMeetings } = trpc.meetings.getMyMeetings.useQuery();
   const { data: calendarData } = trpc.calendar.getEventsByDateRange.useQuery({
-    startDate: new Date(date.getFullYear(), date.getMonth(), 1),
-    endDate: new Date(date.getFullYear(), date.getMonth() + 1, 0),
+    // A week either side of the month, so a week view that straddles two months is complete.
+    startDate: new Date(date.getFullYear(), date.getMonth(), -6),
+    endDate: new Date(date.getFullYear(), date.getMonth() + 1, 7, 23, 59, 59),
   });
 
   // Mutations
@@ -118,88 +120,150 @@ export default function Calendar() {
     setSelectedEvent(event);
   };
 
+  // Meetings read indigo, personal events warm, deadlines neutral, as in the design.
   const eventStyleGetter = (event: CalendarEvent) => {
-    let backgroundColor = "#3174ad";
-    if (event.type === "meeting") backgroundColor = "#4233e0";
-    if (event.type === "deadline") backgroundColor = "#f59e0b";
-    if (event.type === "event") backgroundColor = "#10b981";
-
-    return {
-      style: {
-        backgroundColor,
-        borderRadius: "5px",
-        opacity: 0.8,
-        color: "white",
-        border: "0px",
-        display: "block",
-      },
-    };
+    const palette = {
+      meeting: { backgroundColor: "#eeedff", color: "#2a1fb0" },
+      event: { backgroundColor: "#ffe4d6", color: "#10140f" },
+      deadline: { backgroundColor: "#eceee8", color: "#10140f" },
+    } as const;
+    return { style: { ...palette[event.type], border: "0px", display: "block" } };
   };
 
+  const step = (direction: -1 | 1) => {
+    setDate(current =>
+      view === "month"
+        ? addMonths(current, direction)
+        : view === "day"
+          ? addDays(current, direction)
+          : addWeeks(current, direction)
+    );
+  };
+
+  const rangeLabel =
+    view === "month"
+      ? format(date, "MMMM yyyy")
+      : view === "day"
+        ? format(date, "EEEE, d MMMM yyyy")
+        : `${format(startOfWeek(date, { weekStartsOn: 1 }), "d MMMM")} to ${format(endOfWeek(date, { weekStartsOn: 1 }), "d MMMM yyyy")}`;
+
+  // The next few things after now, whatever the calendar is showing.
+  const comingUp = useMemo(() => {
+    const now = new Date();
+    return events
+      .filter(event => event.start >= now && event.status !== "cancelled")
+      .sort((a, b) => a.start.getTime() - b.start.getTime())
+      .slice(0, 5);
+  }, [events]);
+
   return (
-    <LayoutWrapper>
-    <div className="max-w-7xl mx-auto p-4">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Calendar</h1>
-          <p className="text-muted-foreground">Manage your meetings, events, and deadlines</p>
+    <NowPage title="Calendar" subtitle={rangeLabel}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+          <div className="now-seg" role="group" aria-label="Move through the calendar">
+            <button type="button" aria-label="Previous" style={{ width: 44, padding: 0, fontSize: 16, fontWeight: 700 }} onClick={() => step(-1)}>
+              &lsaquo;
+            </button>
+            <button type="button" style={{ background: "var(--background)", fontWeight: 700 }} onClick={() => setDate(new Date())}>
+              Today
+            </button>
+            <button type="button" aria-label="Next" style={{ width: 44, padding: 0, fontSize: 16, fontWeight: 700 }} onClick={() => step(1)}>
+              &rsaquo;
+            </button>
+          </div>
+          <Segmented<View>
+            label="Calendar view"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "month", label: "Month" },
+              { value: "week", label: "Week" },
+              { value: "day", label: "Day" },
+              { value: "agenda", label: "Agenda" },
+            ]}
+          />
         </div>
-        <div className="flex gap-2">
-          <Dialog open={showMeetingDialog} onOpenChange={setShowMeetingDialog}>
-            <DialogTrigger asChild>
-              <Button>
-                <Users className="mr-2 h-4 w-4" />
-                New Meeting
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Create Meeting</DialogTitle>
-              </DialogHeader>
-              <MeetingForm
-                onSubmit={(data) => createMeeting.mutate(data)}
-                onCancel={() => setShowMeetingDialog(false)}
-              />
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={showEventDialog} onOpenChange={setShowEventDialog}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                New Event
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create Event</DialogTitle>
-              </DialogHeader>
-              <EventForm
-                onSubmit={(data) => createEvent.mutate(data)}
-                onCancel={() => setShowEventDialog(false)}
-              />
-            </DialogContent>
-          </Dialog>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button type="button" className="now-btn white lg" onClick={() => setShowEventDialog(true)}>
+            New event
+          </button>
+          <button type="button" className="now-btn lime lg" onClick={() => setShowMeetingDialog(true)}>
+            New meeting
+          </button>
         </div>
       </div>
 
-      <div className="bg-card rounded-lg p-3 shadow">
-        <BigCalendar
-          localizer={localizer}
-          events={events}
-          startAccessor="start"
-          endAccessor="end"
-          style={{ height: 600 }}
-          view={view}
-          onView={setView}
-          date={date}
-          onNavigate={setDate}
-          onSelectSlot={handleSelectSlot}
-          onSelectEvent={handleSelectEvent}
-          selectable
-          eventPropGetter={eventStyleGetter}
-        />
+      <div className="now-cols">
+        <section className="now-card now-col-main" style={{ overflowX: "auto" }}>
+          <div style={{ minWidth: 620 }}>
+            <BigCalendar
+              localizer={localizer}
+              events={events}
+              startAccessor="start"
+              endAccessor="end"
+              style={{ height: 640 }}
+              toolbar={false}
+              view={view}
+              onView={setView}
+              date={date}
+              onNavigate={setDate}
+              onSelectSlot={handleSelectSlot}
+              onSelectEvent={handleSelectEvent}
+              selectable
+              scrollToTime={new Date(1970, 0, 1, 9)}
+              eventPropGetter={eventStyleGetter}
+            />
+          </div>
+        </section>
+
+        <div className="now-col-side">
+          <section className="now-card">
+            <h2 className="now-h2">Coming up</h2>
+            {comingUp.length === 0 ? (
+              <div className="now-muted">Nothing scheduled.</div>
+            ) : (
+              comingUp.map(event => (
+                <button
+                  key={`${event.type}-${event.id}`}
+                  type="button"
+                  className="now-dated"
+                  style={{ border: 0, background: "transparent", padding: 0, textAlign: "left", color: "inherit" }}
+                  onClick={() => setSelectedEvent(event)}
+                >
+                  <div className="when">{format(event.start, "EEE d")}</div>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="now-row-title">{event.title}</div>
+                    <div className="now-row-sub">
+                      {event.type === "meeting" ? "Meeting" : event.type === "deadline" ? "Deadline" : "Event"} · {format(event.start, "HH:mm")}
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
+            <Link href="/schedule-meeting" className="now-link">
+              All my meetings
+            </Link>
+          </section>
+        </div>
       </div>
+
+      <Dialog open={showMeetingDialog} onOpenChange={setShowMeetingDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Create Meeting</DialogTitle>
+          </DialogHeader>
+          <MeetingForm onSubmit={(data) => createMeeting.mutate(data)} onCancel={() => setShowMeetingDialog(false)} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEventDialog} onOpenChange={setShowEventDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Event</DialogTitle>
+          </DialogHeader>
+          <EventForm onSubmit={(data) => createEvent.mutate(data)} onCancel={() => setShowEventDialog(false)} />
+        </DialogContent>
+      </Dialog>
 
       {/* Event Details Dialog */}
       <Dialog open={!!selectedEvent} onOpenChange={() => setSelectedEvent(null)}>
@@ -266,8 +330,7 @@ export default function Calendar() {
           />
         </DialogContent>
       </Dialog>
-    </div>
-    </LayoutWrapper>
+    </NowPage>
   );
 }
 
