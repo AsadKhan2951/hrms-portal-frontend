@@ -661,3 +661,130 @@ button.now-day:hover { box-shadow: inset 0 0 0 1.5px currentColor; }
 .dark .now-kavatar { background: #4a5146; }
 .dark .now-kavatar.me { background: var(--now-indigo); }
 .dark .now-kavatar.none { background: transparent; }
+
+/* ---------- Work: monthly client rounds ---------- */
+.now-client { display: flex; flex-direction: column; gap: 16px; }
+.now-client-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.now-client-open { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.now-round { padding-bottom: 16px; }
+.now-round-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.now-round-toggle {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 44px; padding: 0; border: 0;
+  background: transparent; color: var(--foreground); text-align: left; flex: 1 1 auto; min-width: 0;
+}
+.now-steps { display: flex; flex-direction: column; margin-top: 8px; }
+.now-step { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--secondary); }
+.now-step-n {
+  flex: 0 0 32px; width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center; font-family: var(--font-num); font-size: 13px;
+  color: var(--muted-foreground);
+}
+.now-step.done .now-step-n { background: var(--now-ink); border-color: var(--now-ink); color: var(--now-lime); }
+.dark .now-step.done .now-step-n { background: #f2f4ee; border-color: #f2f4ee; color: #10140f; }
+.now-step .now-btn.sm { flex: 0 0 auto; }
+.now-attach { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; }
+.now-attach a { display: inline-flex; align-items: center; gap: 4px; color: var(--primary); font-weight: 600; overflow-wrap: anywhere; }
+.now-attach a:hover { text-decoration: underline; }
+.now-feedback {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; padding: 14px 16px;
+  border-radius: 14px; background: var(--now-indigo-tint);
+}
+.now-feedback .now-btn { gap: 6px; }
+.now-link-box {
+  display: block; margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: var(--card);
+  font-family: var(--font-num); font-size: 12px; overflow-wrap: anywhere; user-select: all;
+}
+.now-answers { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 24px; margin-top: 14px; }
+.now-answers dt { font-size: 13px; color: var(--muted-foreground); }
+.now-answers dd { font-weight: 600; overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  .now-step { flex-wrap: wrap; }
+  .now-step .now-btn.sm { margin-left: 46px; }
+}
+
+/* ---------- Work: client meetings calendar ---------- */
+.now-icon-btn.ground { background: var(--background); }
+.now-cal-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.now-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.now-cal-wd { font-size: 12px; font-weight: 700; color: var(--muted-foreground); text-align: left; padding: 0 6px; }
+.now-cal-day {
+  min-height: 96px; border-radius: 12px; background: var(--background); padding: 6px; display: flex;
+  flex-direction: column; gap: 4px; min-width: 0;
+}
+.now-cal-day.out { opacity: 0.45; }
+.now-cal-day.today { box-shadow: inset 0 0 0 2px var(--now-accent); }
+.now-cal-num { font-family: var(--font-num); font-size: 12px; color: var(--muted-foreground); }
+.now-cal-item {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0; width: 100%; padding: 4px 6px; border: 0;
+  border-radius: 8px; background: var(--now-indigo); color: #fff; text-align: left; font-size: 12px; line-height: 1.25;
+}
+.now-cal-item .t { font-family: var(--font-num); font-size: 11px; opacity: 0.85; }
+.now-cal-item .p { font-weight: 600; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.now-cal-item.done { background: var(--secondary); color: var(--foreground); }
+.now-cal-item:hover { filter: brightness(1.1); }
+.now-cal-list { display: flex; flex-direction: column; }
+.now-cal-when { flex: 0 0 150px; font-family: var(--font-num); font-size: 13px; color: var(--muted-foreground); }
+@media (max-width: 720px) {
+  .now-cal-grid { display: none; }
+  .now-cal-when { flex-basis: 112px; }
+}
+@media (min-width: 721px) {
+  .now-cal-list { display: none; }
+}
+
+/* ---------- Public client feedback form (always light) ---------- */
+.cf-page {
+  min-height: 100vh; background: #f5f6f3; color: #10140f; color-scheme: light;
+  font-family: var(--font-body, 'Instrument Sans', system-ui, sans-serif); font-size: 16px; line-height: 1.5;
+}
+.cf-wrap { max-width: 680px; margin: 0 auto; padding: clamp(24px, 6vw, 56px) 16px 64px; display: flex; flex-direction: column; gap: 16px; }
+.cf-head { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.cf-eyebrow { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #4233e0; }
+.cf-title { font-family: var(--font-display, 'Bricolage Grotesque', sans-serif); font-weight: 700; font-size: clamp(30px, 6vw, 42px); line-height: 1.05; letter-spacing: -0.03em; }
+.cf-sub { color: #5b6258; }
+.cf-sub strong { color: #10140f; }
+.cf-form { display: flex; flex-direction: column; gap: 16px; }
+.cf-card { background: #fff; border-radius: 20px; padding: clamp(18px, 4vw, 28px); display: flex; flex-direction: column; gap: 14px; }
+.cf-card fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.cf-center { align-items: center; text-align: center; padding-top: 40px; padding-bottom: 40px; }
+.cf-section { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #5b6258; }
+.cf-q { display: flex; gap: 10px; font-family: var(--font-display, 'Bricolage Grotesque', sans-serif); font-weight: 700; font-size: 19px; line-height: 1.25; letter-spacing: -0.01em; margin-bottom: 12px; }
+.cf-n {
+  flex: 0 0 28px; width: 28px; height: 28px; border-radius: 50%; background: #10140f; color: #ff9068;
+  display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-num, monospace); font-size: 13px;
+}
+.cf-hint { font-size: 14px; color: #5b6258; font-weight: 400; margin: -6px 0 10px; }
+.cf-muted { color: #5b6258; max-width: 440px; }
+.cf-options { display: flex; flex-direction: column; gap: 8px; }
+.cf-option {
+  position: relative; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 10px 14px;
+  border-radius: 14px; background: #f5f6f3; cursor: pointer; font-weight: 500;
+}
+.cf-option:hover { box-shadow: inset 0 0 0 1.5px #10140f; }
+.cf-option.on { background: #eeedff; box-shadow: inset 0 0 0 2px #4233e0; }
+.cf-option input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.cf-option:focus-within { outline: 2px solid #4233e0; outline-offset: 2px; }
+.cf-dot { flex: 0 0 20px; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #8a9186; background: #fff; }
+.cf-option.on .cf-dot { border: 6px solid #4233e0; }
+.cf-box {
+  flex: 0 0 20px; width: 20px; height: 20px; border-radius: 6px; border: 2px solid #8a9186; background: #fff;
+  display: flex; align-items: center; justify-content: center; color: #fff;
+}
+.cf-option.on .cf-box { background: #4233e0; border-color: #4233e0; }
+.cf-field { display: flex; flex-direction: column; gap: 6px; font-weight: 600; }
+.cf-field textarea, .cf-field input {
+  width: 100%; border: 1.5px solid #c9cfc4; border-radius: 14px; background: #fff; color: #10140f;
+  padding: 12px 14px; font: inherit; font-weight: 400; resize: vertical; min-height: 48px;
+}
+.cf-field textarea:focus, .cf-field input:focus { outline: 2px solid #4233e0; outline-offset: 1px; border-color: transparent; }
+.cf-card fieldset .cf-field { margin-top: 12px; }
+.cf-trap { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.cf-problem { padding: 12px 16px; border-radius: 14px; background: #ffe9cc; color: #6b3200; font-weight: 600; }
+.cf-send {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 56px; padding: 0 24px;
+  border: 0; border-radius: 16px; background: linear-gradient(135deg, #ff4b1f, #ff9068); color: #10140f;
+  font-weight: 700; font-size: 17px; cursor: pointer;
+}
+.cf-send:disabled { opacity: 0.7; cursor: default; }
+.cf-tick { width: 52px; height: 52px; border-radius: 50%; background: #10140f; color: #ff9068; display: flex; align-items: center; justify-content: center; }
+.now-round .now-pill { text-transform: none; }

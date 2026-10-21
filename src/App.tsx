@@ -34,6 +34,7 @@ import TeamOverview from "./pages/admin/TeamOverview";
 import Calendar from "./pages/Calendar";
 import ScheduleMeeting from "./pages/ScheduleMeeting";
 import FlowProjectBoard from "./pages/FlowProjectBoard";
+import ClientFeedback from "./pages/ClientFeedback";
 import { useAuth } from "./_core/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -164,6 +165,8 @@ function Router() {
       <Route path="/admin/announcements">
         {() => <ProtectedRoute component={AnnouncementsManagement} />}
       </Route>
+      {/* The client feedback form. Public: the link itself is the key. */}
+      <Route path="/feedback/:token" component={ClientFeedback} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

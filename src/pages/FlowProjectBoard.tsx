@@ -29,6 +29,8 @@ import { NewTaskModal } from "@/pages/fpb/NewTaskModal";
 import { TaskDetailModal } from "@/pages/fpb/TaskDetailModal";
 import { ProjectSettingsModal } from "@/pages/fpb/ProjectSettingsModal";
 import { AddColumnModal } from "@/pages/fpb/AddColumnModal";
+import { ClientRounds } from "@/pages/fpb/ClientRounds";
+import { MeetingsCalendar } from "@/pages/fpb/MeetingsCalendar";
 import {
   PROJECT_TYPES, boardStats, formatDate, getTypeInfo, initialsOf, taskTag,
 } from "@/pages/fpb/shared";
@@ -38,7 +40,8 @@ const VIEW_KEY = "fpb-view";
 /** Up to this many projects sit side by side as buttons; more become a picker. */
 const INLINE_PROJECTS = 4;
 
-type BoardView = "board" | "list";
+type BoardView = "board" | "list" | "client" | "meetings";
+const VIEWS: BoardView[] = ["board", "list", "client", "meetings"];
 
 export default function FlowProjectBoard() {
   const { user } = useAuth();
@@ -51,7 +54,10 @@ export default function FlowProjectBoard() {
     try { return localStorage.getItem(SELECTED_KEY); } catch { return null; }
   });
   const [view, setView] = useState<BoardView>(() => {
-    try { return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "board"; } catch { return "board"; }
+    try {
+      const stored = localStorage.getItem(VIEW_KEY) as BoardView | null;
+      return stored && VIEWS.includes(stored) ? stored : "board";
+    } catch { return "board"; }
   });
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
@@ -266,7 +272,7 @@ export default function FlowProjectBoard() {
               </Popover>
             )}
 
-            {project && (
+            {project && (view === "board" || view === "list") && (
               <SubprojectSwitcher
                 subprojects={subprojects}
                 activeId={activeSubId}
@@ -291,7 +297,12 @@ export default function FlowProjectBoard() {
                 tone="pick"
                 value={view}
                 onChange={setView}
-                options={[{ value: "board", label: "Board" }, { value: "list", label: "List" }]}
+                options={[
+                  { value: "board", label: "Board" },
+                  { value: "list", label: "List" },
+                  { value: "client", label: "Client" },
+                  { value: "meetings", label: "Meetings" },
+                ]}
               />
             )}
           </div>
@@ -327,7 +338,7 @@ export default function FlowProjectBoard() {
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-            {project && (
+            {project && (view === "board" || view === "list") && (
               <button
                 type="button"
                 className="now-btn lime lg"
@@ -371,7 +382,20 @@ export default function FlowProjectBoard() {
           </div>
         )}
 
-        {activeId && !boardLoading && project && (
+        {activeId && !boardLoading && project && view === "client" && (
+          <ClientRounds projectId={activeId} projectTitle={project.title} />
+        )}
+
+        {activeId && !boardLoading && view === "meetings" && (
+          <MeetingsCalendar
+            onOpenProject={id => {
+              setSelectedId(id);
+              setView("client");
+            }}
+          />
+        )}
+
+        {activeId && !boardLoading && project && (view === "board" || view === "list") && (
           <>
             {/* ───────────────────── The four figures */}
             <section className="now-stat-strip" aria-label="Project summary">
