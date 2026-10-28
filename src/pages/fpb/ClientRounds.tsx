@@ -14,9 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  COMMUNICATION, CONCERNS, IMPROVEMENT, PROGRESS, SATISFACTION, feedbackUrl, labelOf,
-} from "@/lib/clientFeedback";
+import { feedbackUrl } from "@/lib/clientFeedback";
+import { FeedbackReport } from "./FeedbackReport";
 
 /**
  * The monthly client work on one project: report, meeting, invoice and
@@ -171,6 +170,7 @@ export function ClientRounds({ projectId, projectTitle }: { projectId: string; p
         <RoundCard
           key={round.id}
           round={round}
+          projectTitle={projectTitle}
           defaultOpen={index === 0 || round.month === current}
           onEdit={kind => setEditing({ round, kind })}
           onDelete={() => {
@@ -200,9 +200,10 @@ export function ClientRounds({ projectId, projectTitle }: { projectId: string; p
 
 // ─────────────────────────────────────────────────────────────── One month
 function RoundCard({
-  round, defaultOpen, onEdit, onDelete, onResetLink,
+  round, projectTitle, defaultOpen, onEdit, onDelete, onResetLink,
 }: {
   round: Round;
+  projectTitle: string;
   defaultOpen: boolean;
   onEdit: (kind: StepKind) => void;
   onDelete: () => void;
@@ -342,14 +343,22 @@ function RoundCard({
             </div>
           )}
           {round.feedback && (
-            <button type="button" className="now-btn ground sm" onClick={() => setShowAnswers(value => !value)}>
-              {showAnswers ? "Hide answers" : "See answers"}
+            <button type="button" className="now-btn ink sm" onClick={() => setShowAnswers(true)}>
+              View feedback
             </button>
           )}
         </div>
       )}
 
-      {open && showAnswers && round.feedback && <Answers feedback={round.feedback} />}
+      {round.feedback && (
+        <FeedbackReport
+          open={showAnswers}
+          onOpenChange={setShowAnswers}
+          projectTitle={projectTitle}
+          monthLabel={round.monthLabel}
+          feedback={round.feedback}
+        />
+      )}
     </article>
   );
 }
@@ -368,32 +377,6 @@ function Attachments({ url, file }: { url: string | null; file: FileRef }) {
         </a>
       )}
     </span>
-  );
-}
-
-function Answers({ feedback }: { feedback: NonNullable<Round["feedback"]> }) {
-  const items: [string, string][] = [
-    ["Overall satisfaction", labelOf(SATISFACTION, feedback.satisfaction)],
-    ["Progress against goals", labelOf(PROGRESS, feedback.progress)],
-    ["Communication", labelOf(COMMUNICATION, feedback.communication)],
-    [
-      "Concerns",
-      feedback.concerns
-        .map(value => (value === "other" && feedback.otherConcern ? `Other: ${feedback.otherConcern}` : labelOf(CONCERNS, value)))
-        .join(", "),
-    ],
-    ["Most valuable improvement", labelOf(IMPROVEMENT, feedback.improvement)],
-    ["Anything else", feedback.comments || "Nothing added"],
-  ];
-  return (
-    <dl className="now-answers">
-      {items.map(([label, value]) => (
-        <div key={label}>
-          <dt>{label}</dt>
-          <dd>{value}</dd>
-        </div>
-      ))}
-    </dl>
   );
 }
 

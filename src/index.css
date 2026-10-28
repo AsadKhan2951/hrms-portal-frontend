@@ -788,3 +788,86 @@ button.now-day:hover { box-shadow: inset 0 0 0 1.5px currentColor; }
 .cf-send:disabled { opacity: 0.7; cursor: default; }
 .cf-tick { width: 52px; height: 52px; border-radius: 50%; background: #10140f; color: #ff9068; display: flex; align-items: center; justify-content: center; }
 .now-round .now-pill { text-transform: none; }
+
+/* ---------- Client feedback report (popup) ---------- */
+.fr-dialog { background: var(--card); gap: 0; --fr-good: #1f7a4d; --fr-good-bg: #dff3e7; --fr-ok: #8a5a00; --fr-ok-bg: #ffecc7; --fr-bad: #b3261e; --fr-bad-bg: #fde3df; }
+.dark .fr-dialog { --fr-good: #6fd39c; --fr-good-bg: #173726; --fr-ok: #ffc266; --fr-ok-bg: #3a2c10; --fr-bad: #ff8a80; --fr-bad-bg: #3d1916; }
+.fr-hero { padding: 28px 28px 24px; background: var(--now-ink); color: #fff; border-radius: inherit; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.fr-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--now-lime); }
+.fr-title { margin-top: 6px; font-family: var(--font-display); font-weight: 700; font-size: 30px; line-height: 1.1; letter-spacing: -0.02em; color: #fff; }
+.fr-meta { margin-top: 4px; color: #c9cfc4; font-size: 14px; }
+.fr-score { display: flex; align-items: center; gap: 20px; margin-top: 22px; padding: 18px 20px; border-radius: 18px; background: #1c221a; }
+.fr-score-num { font-family: var(--font-display); font-weight: 700; font-size: 56px; line-height: 1; letter-spacing: -0.04em; color: var(--now-lime); }
+.fr-score-num span { font-size: 22px; color: #8a9186; margin-left: 2px; }
+.fr-score-label { font-size: 13px; color: #c9cfc4; }
+.fr-score-value { font-family: var(--font-display); font-weight: 700; font-size: 24px; line-height: 1.2; }
+.fr-badge { display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.fr-badge.good { background: var(--fr-good-bg); color: var(--fr-good); }
+.fr-badge.ok { background: var(--fr-ok-bg); color: var(--fr-ok); }
+.fr-badge.bad { background: var(--fr-bad-bg); color: var(--fr-bad); }
+.fr-badge.neutral { background: #2a3027; color: #c9cfc4; }
+.dark .fr-hero { background: #0b0e0a; }
+.dark .fr-badge.good, .fr-hero .fr-badge.good { background: #173726; color: #6fd39c; }
+.fr-hero .fr-badge.ok { background: #3a2c10; color: #ffc266; }
+.fr-hero .fr-badge.bad { background: #3d1916; color: #ff8a80; }
+.fr-body { padding: 20px 28px 24px; display: flex; flex-direction: column; gap: 14px; }
+.fr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.fr-card { background: var(--background); border-radius: 16px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.fr-q { font-size: 13px; color: var(--muted-foreground); font-weight: 600; }
+.fr-a { font-family: var(--font-display); font-weight: 700; font-size: 20px; line-height: 1.2; }
+.fr-a.good { color: var(--fr-good); }
+.fr-a.ok { color: var(--fr-ok); }
+.fr-a.bad { color: var(--fr-bad); }
+.fr-note { font-size: 14px; color: var(--muted-foreground); }
+.fr-scale { display: flex; gap: 4px; margin-top: 4px; }
+.fr-seg { flex: 1 1 0; height: 8px; border-radius: 4px; background: var(--secondary); }
+.fr-seg.on.good { background: var(--fr-good); }
+.fr-seg.on.ok { background: var(--fr-ok); }
+.fr-seg.on.bad { background: var(--fr-bad); }
+.fr-seg.on.neutral { background: var(--muted-foreground); }
+.fr-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.fr-chip { padding: 6px 12px; border-radius: 999px; font-size: 14px; font-weight: 600; }
+.fr-chip.good { background: var(--fr-good-bg); color: var(--fr-good); }
+.fr-chip.bad { background: var(--fr-bad-bg); color: var(--fr-bad); }
+.fr-quote { display: flex; gap: 10px; margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--card); font-size: 16px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.fr-quote svg { color: var(--now-indigo); margin-top: 3px; }
+.fr-quote.small { font-size: 14px; }
+.fr-improve { background: var(--now-indigo-tint); }
+.fr-improve-value { font-family: var(--font-display); font-weight: 700; font-size: 22px; line-height: 1.2; color: var(--primary); }
+.fr-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding-top: 4px; }
+.fr-dialog [data-slot="dialog-close"] { color: #fff; }
+@media (max-width: 560px) {
+  .fr-hero { padding: 22px 18px 18px; }
+  .fr-body { padding: 16px 18px 20px; }
+  .fr-title { font-size: 24px; }
+  .fr-score { gap: 14px; padding: 14px; }
+  .fr-score-num { font-size: 44px; }
+  .fr-foot .now-btn { flex: 1 1 0; }
+}
+.fr-n {
+  display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: 8px;
+  border-radius: 50%; background: var(--now-ink); color: var(--now-lime); font-family: var(--font-num); font-size: 11px;
+}
+.dark .fr-n { background: #f2f4ee; color: #10140f; }
+.fr-q { display: flex; align-items: center; }
+.fr-a.focus { color: var(--primary); }
+.fr-a.neutral { color: var(--foreground); }
+.fr-opts { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.fr-opt {
+  display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 7px 12px; border-radius: 10px;
+  background: var(--card); color: var(--muted-foreground); font-size: 14px;
+}
+.fr-opt.on { font-weight: 700; color: var(--foreground); }
+.fr-opt.on.good { background: var(--fr-good-bg); color: var(--fr-good); }
+.fr-opt.on.ok { background: var(--fr-ok-bg); color: var(--fr-ok); }
+.fr-opt.on.bad { background: var(--fr-bad-bg); color: var(--fr-bad); }
+.fr-opt.on.focus { background: var(--now-indigo-tint); color: var(--primary); }
+.fr-opt.on.neutral { background: var(--secondary); }
+.fr-mark {
+  flex: 0 0 18px; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.fr-mark.box { border-radius: 5px; }
+.fr-opt.on .fr-mark { border-color: currentColor; background: currentColor; }
+.fr-opt.on .fr-mark svg { color: var(--card); }
+.fr-grid > .fr-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
