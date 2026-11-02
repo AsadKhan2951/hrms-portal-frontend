@@ -216,6 +216,11 @@ export default function Dashboard() {
 
     weekAttendance.forEach((entry: any) => {
       const timeIn = new Date(entry.timeIn);
+      // Closed automatically because nobody clocked out: no real hours.
+      if (entry.autoClockedOut) {
+        missingCount += 1;
+        return;
+      }
       const isActive = entry.status === "active" || !entry.timeOut;
       if (isActive) {
         const timeInDay = startOfDay(timeIn).getTime();

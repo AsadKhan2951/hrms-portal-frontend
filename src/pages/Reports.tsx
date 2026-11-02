@@ -109,7 +109,7 @@ export default function Reports() {
       if (timeIn) {
         uniqueDays.add(timeIn.toDateString());
       }
-      if (!timeOut || entry.status === "active") {
+      if (!timeOut || entry.status === "active" || entry.autoClockedOut) {
         missingClockouts += 1;
         return;
       }
@@ -253,7 +253,9 @@ export default function Reports() {
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
                     {entry.timeIn ? format(new Date(entry.timeIn), "HH:mm") : "--"} -
-                    {entry.timeOut ? ` ${format(new Date(entry.timeOut), "HH:mm")}` : " --"}
+                    {entry.autoClockedOut
+                      ? " missed clock-out"
+                      : entry.timeOut ? ` ${format(new Date(entry.timeOut), "HH:mm")}` : " --"}
                   </div>
                 </div>
               ))}

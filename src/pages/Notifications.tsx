@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import NowPage, { Segmented, WingmanBanner } from "@/components/now/NowPage";
@@ -17,12 +17,29 @@ const KIND: Record<string, string> = {
   announcement: "Announcement",
   payslip_issued: "Pay",
   system_alert: "Update",
+  project_member_added: "Project",
+  task_comment: "Comment",
+  task_completed: "Task",
+  task_mention: "Mention",
+  task_due_soon: "Deadline",
+  task_overdue: "Deadline",
 };
+
+/** Project-board notifications, for the "Projects" filter. */
+const PROJECT_TYPES = new Set([
+  "project_assigned", "task_assigned", "project_member_added", "task_comment",
+  "task_completed", "task_mention", "task_due_soon", "task_overdue",
+]);
+
+/** Only in-app paths are followed; anything else stays put. */
+function safeLink(link: unknown): string | null {
+  return typeof link === "string" && link.startsWith("/") && !link.startsWith("//") ? link : null;
+}
 
 const MATCHES: Record<Filter, (n: any) => boolean> = {
   all: () => true,
   unread: n => !n.isRead,
-  projects: n => n.type === "project_assigned" || n.type === "task_assigned",
+  projects: n => PROJECT_TYPES.has(n.type),
   attendance: n => n.type === "attendance_issue",
   hours: n => n.type === "hours_shortfall",
 };
@@ -30,6 +47,7 @@ const MATCHES: Record<Filter, (n: any) => boolean> = {
 /** Notifications: what happened, newest first, with the one thing that needs action called out. */
 export default function Notifications() {
   const utils = trpc.useUtils();
+  const [, navigate] = useLocation();
   const [filter, setFilter] = useState<Filter>("all");
   const { data = [], isLoading, isError } = trpc.notifications.getAll.useQuery();
   const fourWeeks = trpc.time.getFourWeeks.useQuery();
@@ -49,6 +67,14 @@ export default function Notifications() {
     onSuccess: refresh,
     onError: () => toast.error("Could not delete it"),
   });
+
+  /** Opening a notification marks it read and goes to what it is about. */
+  const open = (n: any) => {
+    const link = safeLink(n.link);
+    if (!link) return;
+    if (!n.isRead) markRead.mutate({ notificationId: String(n.id) });
+    navigate(link);
+  };
 
   const items = data as any[];
   const unread = items.filter(n => !n.isRead).length;
@@ -122,7 +148,14 @@ export default function Notifications() {
                 aria-hidden="true"
                 style={{ flex: "0 0 10px", height: 10, marginTop: 6, borderRadius: "50%", background: n.isRead ? "transparent" : "var(--now-indigo)" }}
               />
-              <div style={{ flex: "1 1 0", minWidth: 0 }}>
+              <div
+                style={{ flex: "1 1 0", minWidth: 0, cursor: safeLink(n.link) ? "pointer" : undefined }}
+                role={safeLink(n.link) ? "link" : undefined}
+                tabIndex={safeLink(n.link) ? 0 : undefined}
+                onClick={() => open(n)}
+                onKeyDown={e => { if (e.key === "Enter") open(n); }}
+                aria-label={safeLink(n.link) ? `Open: ${n.title}` : undefined}
+              >
                 <div style={{ fontWeight: n.isRead ? 600 : 700 }}>{n.title}</div>
                 <div className="now-body-2">{n.message}</div>
                 <div className="now-small now-muted" style={{ marginTop: 4 }}>

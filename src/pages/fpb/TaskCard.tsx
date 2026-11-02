@@ -4,9 +4,11 @@ import { initialsOf, isTaskDone, taskTag } from "./shared";
 
 /** One task card on a project's board. */
 export function TaskCard({
-  task, index, users, onOpen, myId,
+  task, index, users, onOpen, myId, labels = [],
 }: {
   task: any; index: number; users: any[];
+  /** The project's labels; the card shows the ones it carries. */
+  labels?: any[];
   onOpen: () => void;
   myId?: string | null;
   /** Kept so older callers still compile; the card reads the portal theme itself. */
@@ -20,6 +22,8 @@ export function TaskCard({
   const tag = taskTag(task);
   const done = isTaskDone(task);
   const loud = !done && (task.priority === "urgent" || task.priority === "high");
+  const labelIds: string[] = (task.labelIds ?? []).map(String);
+  const cardLabels = labels.filter((l: any) => labelIds.includes(String(l.id)));
 
   return (
     <Draggable draggableId={String(task.id)} index={index}>
@@ -35,6 +39,20 @@ export function TaskCard({
           aria-label={`${task.title}. ${tag.label}`}
           className={`now-kcard${snapshot.isDragging ? " dragging" : ""}`}
         >
+          {cardLabels.length > 0 && (
+            <div className="now-kcard-labels">
+              {cardLabels.map((l: any) => (
+                <span
+                  key={l.id}
+                  className="fpb-label sm"
+                  style={{ backgroundColor: l.color }}
+                  title={l.name || undefined}
+                >
+                  {l.name || "\u00a0"}
+                </span>
+              ))}
+            </div>
+          )}
           <div className={`now-kcard-title${done ? " done" : ""}`}>{task.title}</div>
 
           {(loud || subtasks.length > 0 || task.commentCount > 0) && (

@@ -35,7 +35,9 @@ export default function Attendance() {
   const calculateStats = () => {
     if (!attendance) return { totalDays: 0, avgHours: 0, completedDays: 0, lateArrivals: 0, earlyDepartures: 0 };
     
-    const completed = attendance.filter(e => e.status !== "active");
+    // A session closed automatically because nobody clocked out has no real
+    // hours, so it is left out of the totals and the average.
+    const completed = attendance.filter(e => e.status !== "active" && !(e as any).autoClockedOut);
     const totalHours = completed.reduce((sum, entry) => {
       return sum + (parseFloat(entry.totalHours as any) || 0);
     }, 0);
@@ -211,7 +213,8 @@ export default function Attendance() {
                 {attendance && attendance.length > 0 ? (
                   <div className="space-y-2">
                     {attendance.map((entry) => {
-                      const hours = parseFloat(entry.totalHours as any) || 0;
+                      const missed = Boolean((entry as any).autoClockedOut);
+                      const hours = missed ? 0 : parseFloat(entry.totalHours as any) || 0;
                       const timeIn = new Date(entry.timeIn);
                       
                       return (
@@ -228,9 +231,16 @@ export default function Attendance() {
                                 <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                                   <span>In: {format(timeIn, "HH:mm:ss")}</span>
                                   <span>•</span>
-                                  <span>
-                                    Out: {entry.timeOut ? format(new Date(entry.timeOut), "HH:mm:ss") : "Active"}
-                                  </span>
+                                  {missed ? (
+                                    // The sweep's closing time is not a real clock-out; say so instead.
+                                    <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600">
+                                      Missed clock-out
+                                    </Badge>
+                                  ) : (
+                                    <span>
+                                      Out: {entry.timeOut ? format(new Date(entry.timeOut), "HH:mm:ss") : "Active"}
+                                    </span>
+                                  )}
                                 </div>
                                 {entry.notes && (
                                   <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
@@ -435,7 +445,7 @@ export default function Attendance() {
                 {attendance && attendance.length > 0 ? (
                   <div className="space-y-2">
                     {attendance.map((entry) => {
-                      const hours = parseFloat(entry.totalHours as any) || 0;
+                      const hours = (entry as any).autoClockedOut ? 0 : parseFloat(entry.totalHours as any) || 0;
                       // Estimate break time (assuming 5% of total time as breaks)
                       const estimatedBreakHours = hours * 0.05;
                       const netWorkHours = hours - estimatedBreakHours;

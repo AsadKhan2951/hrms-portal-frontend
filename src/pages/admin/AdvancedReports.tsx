@@ -188,7 +188,7 @@ export default function AdvancedReports() {
           fmtDay(d.date),
           d.status,
           fmtTime(d.timeIn),
-          fmtTime(d.timeOut),
+          d.missingClockOut && !d.timeOut ? "Missed clock-out" : fmtTime(d.timeOut),
           d.hours,
           d.missingClockOut ? "yes" : "",
         ])
@@ -352,7 +352,15 @@ export default function AdvancedReports() {
                         )}
                       </td>
                       <td className="p-3 text-right">{fmtTime(d.timeIn)}</td>
-                      <td className="p-3 text-right">{fmtTime(d.timeOut)}</td>
+                      <td className="p-3 text-right">
+                        {d.missingClockOut && !d.timeOut ? (
+                          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-600">
+                            Missed clock-out
+                          </span>
+                        ) : (
+                          fmtTime(d.timeOut)
+                        )}
+                      </td>
                       <td className="p-3 text-right font-medium">{d.hours || "--"}</td>
                     </tr>
                   ))}

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
-import { DragDropContext, Droppable, type DropResult } from "@hello-pangea/dnd";
+import { Link, useLocation, useSearch } from "wouter";
+import {
+  DragDropContext, Draggable, Droppable, type DraggableProvidedDragHandleProps, type DropResult,
+} from "@hello-pangea/dnd";
 import { toast } from "sonner";
 import {
-  Check, ChevronDown, Columns3, FolderPlus, Layers, Loader2, MoreHorizontal, Pencil, Plus,
-  Search, Settings, Trash2,
+  ArrowLeft, ArrowRight, Check, ChevronDown, Columns3, FolderPlus, GripVertical, Layers, Loader2,
+  MoreHorizontal, Pencil, Plus, Search, Settings, Trash2,
 } from "lucide-react";
 
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -99,6 +101,24 @@ export default function FlowProjectBoard() {
   // to the new project's first sub-project rather than one from the old board.
   useEffect(() => { setSubId(null); }, [activeId]);
 
+  // Opened from a notification: /board?project=<id>&task=<id> lands on the
+  // project and opens the task, then the address is tidied so a refresh or
+  // closing the task does not reopen it.
+  const routeSearch = useSearch();
+  const [, navigate] = useLocation();
+  useEffect(() => {
+    const params = new URLSearchParams(routeSearch);
+    const linkedProject = params.get("project");
+    const linkedTask = params.get("task");
+    if (!linkedProject && !linkedTask) return;
+    if (linkedProject) {
+      setSelectedId(linkedProject);
+      setView("board");
+    }
+    if (linkedTask) setOpenTaskId(linkedTask);
+    navigate("/board", { replace: true });
+  }, [routeSearch, navigate]);
+
   const { data: board, isLoading: boardLoading } = trpc.fpb.getBoard.useQuery(
     { projectId: activeId ?? "", subprojectId: subId ?? undefined },
     { enabled: Boolean(activeId) }
@@ -118,6 +138,11 @@ export default function FlowProjectBoard() {
       );
     },
     onError,
+  });
+  const reorderColumns = trpc.fpb.reorderColumns.useMutation({
+    onSuccess: refreshBoard,
+    // The optimistic order is thrown away and the server's order shown again.
+    onError: (e: any) => { refreshBoard(); onError(e); },
   });
   const moveTask = trpc.fpb.moveTask.useMutation({
     onSuccess: () => {
@@ -142,12 +167,16 @@ export default function FlowProjectBoard() {
   });
 
   const columns = (board?.columns ?? []) as any[];
+  const labels = ((board as any)?.labels ?? []) as any[];
   const tasks = (board?.tasks ?? []) as any[];
   const project = board?.project as any;
   const subprojects = (board?.subprojects ?? []) as any[];
   // The sub-project actually being shown, as resolved by the server.
   const activeSubId = (board?.activeSubprojectId ?? null) as string | null;
   const activeSub = subprojects.find(s => s.id === activeSubId);
+  // Deleting a column or a sub-project is the owner's (or an admin's) call;
+  // the server checks this too.
+  const canManage = isAdmin || String(project?.createdBy ?? "") === myId;
 
   const tasksByColumn = useMemo(() => {
     const map = new Map<string, any[]>();
@@ -168,18 +197,59 @@ export default function FlowProjectBoard() {
     return (projects as any[]).filter(p => p.title.toLowerCase().includes(q));
   }, [projects, search]);
 
+  /** Shows a new column order straight away, then saves it. */
+  const applyColumnOrder = useCallback(
+    (orderedIds: string[]) => {
+      if (!activeId) return;
+      const key = { projectId: activeId, subprojectId: subId ?? undefined };
+      utils.fpb.getBoard.setData(key, (old: any) => {
+        if (!old) return old;
+        const byId = new Map((old.columns as any[]).map(c => [c.id, c]));
+        return {
+          ...old,
+          columns: orderedIds.map((id, position) => ({ ...byId.get(id), position })),
+        };
+      });
+      reorderColumns.mutate({ projectId: activeId, columnIds: orderedIds });
+    },
+    [activeId, subId, utils, reorderColumns]
+  );
+
+  /** Moves a column one place left (-1) or right (+1), for the column menu. */
+  const shiftColumn = useCallback(
+    (columnId: string, delta: -1 | 1) => {
+      const ids = columns.map(c => String(c.id));
+      const from = ids.indexOf(columnId);
+      const to = from + delta;
+      if (from < 0 || to < 0 || to >= ids.length) return;
+      [ids[from], ids[to]] = [ids[to], ids[from]];
+      applyColumnOrder(ids);
+    },
+    [columns, applyColumnOrder]
+  );
+
   const onDragEnd = useCallback(
     (result: DropResult) => {
-      const { destination, source, draggableId } = result;
+      const { destination, source, draggableId, type } = result;
       if (!destination) return;
       if (destination.droppableId === source.droppableId && destination.index === source.index) return;
+
+      // A whole column dragged to a new place on the board.
+      if (type === "COLUMN") {
+        const ids = columns.map(c => String(c.id));
+        const [moved] = ids.splice(source.index, 1);
+        ids.splice(destination.index, 0, moved);
+        applyColumnOrder(ids);
+        return;
+      }
+
       moveTask.mutate({
         id: draggableId,
         columnId: destination.droppableId,
         position: destination.index,
       });
     },
-    [moveTask]
+    [columns, moveTask, applyColumnOrder]
   );
 
   const usePicker = (projects as any[]).length > INLINE_PROJECTS || filterType !== "all";
@@ -278,6 +348,7 @@ export default function FlowProjectBoard() {
                 activeId={activeSubId}
                 onSelect={id => setSubId(id)}
                 onCreate={() => setNewSubprojectOpen(true)}
+                canDelete={canManage}
                 onDelete={sp => {
                   if (
                     confirm(
@@ -443,58 +514,82 @@ export default function FlowProjectBoard() {
             {view === "board" && (
               <section className="now-board" aria-label="Board">
                 <DragDropContext onDragEnd={onDragEnd}>
-                  <div className="now-board-cols">
-                    {columns.map(col => {
-                      const colTasks = tasksByColumn.get(col.id) ?? [];
-                      return (
-                        <div key={col.id} className="now-board-col">
-                          <ColumnHeader
-                            column={col}
-                            count={colTasks.length}
-                            onRename={(id, name) => updateColumn.mutate({ id, name })}
-                            onDelete={id => {
-                              if (confirm("Delete this column? Its tasks move to the previous column.")) {
-                                deleteColumn.mutate({ id });
-                              }
-                            }}
-                            tokens={t}
-                          />
-                          <Droppable droppableId={String(col.id)}>
-                            {(provided, snapshot) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.droppableProps}
-                                className={`now-board-drop${snapshot.isDraggingOver ? " over" : ""}`}
-                              >
-                                {colTasks.map((task, index) => (
-                                  <TaskCard
-                                    key={task.id}
-                                    task={task}
-                                    index={index}
-                                    users={users as any[]}
-                                    myId={myId}
-                                    onOpen={() => setOpenTaskId(task.id)}
+                  {/* Columns are draggable by their header; cards inside them too. */}
+                  <Droppable droppableId="board-columns" type="COLUMN" direction="horizontal">
+                    {boardProvided => (
+                      <div
+                        className="now-board-cols"
+                        ref={boardProvided.innerRef}
+                        {...boardProvided.droppableProps}
+                      >
+                        {columns.map((col, colIndex) => {
+                          const colTasks = tasksByColumn.get(col.id) ?? [];
+                          return (
+                            <Draggable key={col.id} draggableId={`col-${col.id}`} index={colIndex}>
+                              {(colProvided, colSnapshot) => (
+                                <div
+                                  ref={colProvided.innerRef}
+                                  {...colProvided.draggableProps}
+                                  className={`now-board-col${colSnapshot.isDragging ? " dragging" : ""}`}
+                                >
+                                  <ColumnHeader
+                                    column={col}
+                                    count={colTasks.length}
+                                    dragHandleProps={colProvided.dragHandleProps}
+                                    canMoveLeft={colIndex > 0}
+                                    canMoveRight={colIndex < columns.length - 1}
+                                    onMove={delta => shiftColumn(String(col.id), delta)}
+                                    canDelete={canManage}
+                                    onRename={(id, name) => updateColumn.mutate({ id, name })}
+                                    onDelete={id => {
+                                      if (confirm("Delete this column? Its tasks move to the previous column.")) {
+                                        deleteColumn.mutate({ id });
+                                      }
+                                    }}
+                                    tokens={t}
                                   />
-                                ))}
-                                {provided.placeholder}
-                              </div>
-                            )}
-                          </Droppable>
-                          <button type="button" className="now-add-task" onClick={() => setNewTaskColumn(col.id)}>
-                            + Add task
-                          </button>
-                        </div>
-                      );
-                    })}
-                    {columns.length === 0 && (
-                      <div className="now-card items-center py-10 text-center" style={{ flex: "1 1 auto" }}>
-                        <p className="now-muted">This board has no columns yet.</p>
-                        <button type="button" className="now-btn ink sm" onClick={() => setAddColumnOpen(true)}>
-                          Add column
-                        </button>
+                                  <Droppable droppableId={String(col.id)} type="TASK">
+                                    {(provided, snapshot) => (
+                                      <div
+                                        ref={provided.innerRef}
+                                        {...provided.droppableProps}
+                                        className={`now-board-drop${snapshot.isDraggingOver ? " over" : ""}`}
+                                      >
+                                        {colTasks.map((task, index) => (
+                                          <TaskCard
+                                            key={task.id}
+                                            task={task}
+                                            index={index}
+                                            users={users as any[]}
+                                            labels={labels}
+                                            myId={myId}
+                                            onOpen={() => setOpenTaskId(task.id)}
+                                          />
+                                        ))}
+                                        {provided.placeholder}
+                                      </div>
+                                    )}
+                                  </Droppable>
+                                  <button type="button" className="now-add-task" onClick={() => setNewTaskColumn(col.id)}>
+                                    + Add task
+                                  </button>
+                                </div>
+                              )}
+                            </Draggable>
+                          );
+                        })}
+                        {boardProvided.placeholder}
+                        {columns.length === 0 && (
+                          <div className="now-card items-center py-10 text-center" style={{ flex: "1 1 auto" }}>
+                            <p className="now-muted">This board has no columns yet.</p>
+                            <button type="button" className="now-btn ink sm" onClick={() => setAddColumnOpen(true)}>
+                              Add column
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
+                  </Droppable>
                 </DragDropContext>
               </section>
             )}
@@ -601,6 +696,9 @@ export default function FlowProjectBoard() {
         members={project?.memberIds ?? []}
         users={users as any[]}
         tokens={t}
+        columns={columns}
+        labels={labels}
+        projectOwnerId={project?.createdBy ? String(project.createdBy) : null}
       />
     </LayoutWrapper>
   );
@@ -613,13 +711,15 @@ export default function FlowProjectBoard() {
  * Marketing — each with its own cards on the shared columns.
  */
 function SubprojectSwitcher({
-  subprojects, activeId, onSelect, onCreate, onDelete, tokens,
+  subprojects, activeId, onSelect, onCreate, onDelete, canDelete, tokens,
 }: {
   subprojects: any[];
   activeId: string | null;
   onSelect: (id: string) => void;
   onCreate: () => void;
   onDelete: (sp: any) => void;
+  /** Only the project's owner (or an admin) may delete a sub-project. */
+  canDelete: boolean;
   tokens: any;
 }) {
   const active = subprojects.find(s => s.id === activeId);
@@ -647,7 +747,7 @@ function SubprojectSwitcher({
               />
               <span className="truncate">{s.name}</span>
             </span>
-            {subprojects.length > 1 && (
+            {canDelete && subprojects.length > 1 && (
               <button
                 onClick={e => { e.stopPropagation(); onDelete(s); }}
                 className="shrink-0 rounded p-0.5 opacity-0 hover:!opacity-100 hover:text-red-500 focus-visible:opacity-100 group-hover:opacity-70"
@@ -671,11 +771,18 @@ function SubprojectSwitcher({
 // ───────────────────────────────────────────────────────────── Column header
 function ColumnHeader({
   column, count, onRename, onDelete, tokens,
+  dragHandleProps, canMoveLeft, canMoveRight, onMove, canDelete,
 }: {
   column: any; count: number;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   tokens: any;
+  /** The header is the handle for dragging the whole column. */
+  dragHandleProps?: DraggableProvidedDragHandleProps | null;
+  canMoveLeft: boolean;
+  canMoveRight: boolean;
+  onMove: (delta: -1 | 1) => void;
+  canDelete: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(column.name);
@@ -690,7 +797,7 @@ function ColumnHeader({
   };
 
   return (
-    <div className="now-board-col-head">
+    <div className="now-board-col-head" {...(editing ? {} : dragHandleProps ?? {})}>
       {editing ? (
         <input
           autoFocus
@@ -706,7 +813,10 @@ function ColumnHeader({
           style={{ minHeight: 36, height: 36, padding: "0 10px", fontSize: 15 }}
         />
       ) : (
-        <span className="truncate font-bold">{column.name}</span>
+        <span className="flex min-w-0 items-center gap-1" title="Drag to move this column">
+          <GripVertical className="now-board-grip h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="truncate font-bold">{column.name}</span>
+        </span>
       )}
       <span className="flex shrink-0 items-center gap-1">
         <span className="now-board-count">{count}</span>
@@ -721,11 +831,30 @@ function ColumnHeader({
               <Pencil className="mr-2 h-3.5 w-3.5" /> Rename
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => onDelete(column.id)}
-              className="cursor-pointer text-red-500 focus:text-red-500"
+              disabled={!canMoveLeft}
+              onClick={() => onMove(-1)}
+              className="cursor-pointer"
             >
-              <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete column
+              <ArrowLeft className="mr-2 h-3.5 w-3.5" /> Move left
             </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!canMoveRight}
+              onClick={() => onMove(1)}
+              className="cursor-pointer"
+            >
+              <ArrowRight className="mr-2 h-3.5 w-3.5" /> Move right
+            </DropdownMenuItem>
+            {canDelete && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => onDelete(column.id)}
+                  className="cursor-pointer text-red-500 focus:text-red-500"
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete column
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </span>

@@ -606,6 +606,11 @@ button.now-day:hover { box-shadow: inset 0 0 0 1.5px currentColor; }
 .now-board-cols { display: flex; align-items: flex-start; gap: 16px; }
 .now-board-col { flex: 1 0 200px; min-width: 200px; max-width: 380px; display: flex; flex-direction: column; }
 .now-board-col-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; padding: 0 4px 10px; }
+.now-board-col.dragging { opacity: 0.92; filter: drop-shadow(0 14px 30px rgba(16, 20, 15, 0.18)); }
+.now-board-col-head[data-rfd-drag-handle-draggable-id] { cursor: grab; }
+.now-board-col.dragging .now-board-col-head { cursor: grabbing; }
+.now-board-grip { color: var(--muted-foreground); opacity: 0.45; }
+.now-board-col-head:hover .now-board-grip { opacity: 0.9; }
 .now-board-count { font-family: var(--font-num); font-size: 13px; color: var(--muted-foreground); }
 .now-board-more {
   width: 32px; height: 32px; border: 0; border-radius: 10px; background: transparent; color: var(--muted-foreground);
@@ -871,3 +876,38 @@ button.now-day:hover { box-shadow: inset 0 0 0 1.5px currentColor; }
 .fr-opt.on .fr-mark { border-color: currentColor; background: currentColor; }
 .fr-opt.on .fr-mark svg { color: var(--card); }
 .fr-grid > .fr-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+/* ───────────── Project board: labels, editor, rendered Markdown, task sidebar */
+.now-kcard-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: -4px; }
+.fpb-label {
+  display: inline-flex; align-items: center; min-height: 22px; min-width: 40px; padding: 0 8px;
+  border-radius: 6px; color: #fff; font-size: 12px; font-weight: 600; line-height: 1;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fpb-label.sm { min-height: 16px; min-width: 32px; padding: 0 6px; font-size: 11px; border-radius: 4px; }
+.fpb-side-btn {
+  display: flex; width: 100%; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px;
+  border-radius: 8px; font-size: 13px; font-weight: 600; text-align: left; transition: filter 0.15s;
+}
+.fpb-side-btn:hover { filter: brightness(0.95); }
+.fpb-mention {
+  display: inline-block; padding: 0 4px; border-radius: 4px; font-weight: 600;
+  background: var(--now-indigo-tint); color: var(--now-indigo);
+}
+.fpb-md { font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.fpb-md > * + * { margin-top: 0.5em; }
+.fpb-md h3 { font-size: 1.15em; font-weight: 700; }
+.fpb-md h4 { font-size: 1.05em; font-weight: 700; }
+.fpb-md h5 { font-size: 1em; font-weight: 700; }
+.fpb-md ul { list-style: disc; padding-left: 1.4em; }
+.fpb-md ol { list-style: decimal; padding-left: 1.4em; }
+.fpb-md li.fpb-md-check { list-style: none; margin-left: -1.4em; display: flex; gap: 8px; align-items: flex-start; }
+.fpb-md li.fpb-md-check input { margin-top: 0.35em; accent-color: var(--now-indigo); }
+.fpb-md .fpb-md-done { text-decoration: line-through; color: var(--muted-foreground); }
+.fpb-md a { color: var(--now-indigo); text-decoration: underline; text-underline-offset: 2px; }
+.fpb-md code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; padding: 1px 4px; border-radius: 4px; background: var(--background); }
+.fpb-md pre { padding: 10px 12px; border-radius: 8px; background: var(--background); overflow-x: auto; }
+.fpb-md pre code { padding: 0; background: transparent; }
+.fpb-md blockquote { border-left: 3px solid var(--border); padding-left: 10px; color: var(--muted-foreground); }
+.fpb-md hr { border: 0; border-top: 1px solid var(--border); }
+.dark .fpb-mention, .dark .fpb-md a { color: #b9b3ff; }
