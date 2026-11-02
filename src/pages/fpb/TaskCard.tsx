@@ -1,15 +1,22 @@
 import { Draggable } from "@hello-pangea/dnd";
-import { CheckSquare, MessageSquare } from "lucide-react";
+import { CheckSquare, MessageSquare, MoreHorizontal, Paperclip, Pencil, Trash2 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { initialsOf, isTaskDone, taskTag } from "./shared";
+import { attachmentUrl } from "./TaskAttachments";
+import { checklistProgress } from "./markdownParser";
 
 /** One task card on a project's board. */
 export function TaskCard({
-  task, index, users, onOpen, myId, labels = [],
+  task, index, users, onOpen, myId, labels = [], onDelete,
 }: {
   task: any; index: number; users: any[];
   /** The project's labels; the card shows the ones it carries. */
   labels?: any[];
   onOpen: () => void;
+  /** Shown in the card's quick menu when given. */
+  onDelete?: () => void;
   myId?: string | null;
   /** Kept so older callers still compile; the card reads the portal theme itself. */
   tokens?: any; theme?: string;
@@ -24,6 +31,10 @@ export function TaskCard({
   const loud = !done && (task.priority === "urgent" || task.priority === "high");
   const labelIds: string[] = (task.labelIds ?? []).map(String);
   const cardLabels = labels.filter((l: any) => labelIds.includes(String(l.id)));
+  // Checklist items written in the description count too, like Trello's checklists.
+  const descChecks = checklistProgress(task.description);
+  const checkDone = doneSubs + descChecks.done;
+  const checkTotal = subtasks.length + descChecks.total;
 
   return (
     <Draggable draggableId={String(task.id)} index={index}>
@@ -37,8 +48,37 @@ export function TaskCard({
             if (event.key === "Enter") onOpen();
           }}
           aria-label={`${task.title}. ${tag.label}`}
-          className={`now-kcard${snapshot.isDragging ? " dragging" : ""}`}
+          className={`now-kcard group${snapshot.isDragging ? " dragging" : ""}`}
         >
+          {/* Quick actions, like Trello's pencil on hover. */}
+          <div className="now-kcard-menu" onClick={e => e.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-label={`Actions for ${task.title}`} className="now-kcard-menu-btn">
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-card border-border text-foreground">
+                <DropdownMenuItem onClick={onOpen} className="cursor-pointer">
+                  <Pencil className="mr-2 h-3.5 w-3.5" /> Open / edit card
+                </DropdownMenuItem>
+                {onDelete && (
+                  <DropdownMenuItem onClick={onDelete} className="cursor-pointer text-red-500 focus:text-red-500">
+                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete card
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          {task.coverAttachmentId && (
+            <img
+              src={attachmentUrl(task.coverAttachmentId)}
+              alt=""
+              loading="lazy"
+              draggable={false}
+              className="now-kcard-cover"
+            />
+          )}
           {cardLabels.length > 0 && (
             <div className="now-kcard-labels">
               {cardLabels.map((l: any) => (
@@ -55,14 +95,17 @@ export function TaskCard({
           )}
           <div className={`now-kcard-title${done ? " done" : ""}`}>{task.title}</div>
 
-          {(loud || subtasks.length > 0 || task.commentCount > 0) && (
+          {(loud || checkTotal > 0 || task.commentCount > 0 || task.attachmentCount > 0) && (
             <div className="now-kcard-meta">
               {loud && <span className="now-pill risk">{task.priority}</span>}
-              {subtasks.length > 0 && (
-                <span><CheckSquare className="h-3.5 w-3.5" aria-hidden="true" /> {doneSubs}/{subtasks.length}</span>
+              {checkTotal > 0 && (
+                <span><CheckSquare className="h-3.5 w-3.5" aria-hidden="true" /> {checkDone}/{checkTotal}</span>
               )}
               {task.commentCount > 0 && (
                 <span><MessageSquare className="h-3.5 w-3.5" aria-hidden="true" /> {task.commentCount}</span>
+              )}
+              {task.attachmentCount > 0 && (
+                <span><Paperclip className="h-3.5 w-3.5" aria-hidden="true" /> {task.attachmentCount}</span>
               )}
             </div>
           )}

@@ -12,7 +12,7 @@ import {
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useFPBTheme } from "@/hooks/useFPBTheme";
 import { trpc } from "@/lib/trpc";
-import { isOrgWide } from "@/lib/roles";
+import { isAnyHead, isOrgWide } from "@/lib/roles";
 import LayoutWrapper from "@/components/LayoutWrapper";
 import { NowPageHeader, Segmented, WingmanBanner } from "@/components/now/NowPage";
 import {
@@ -33,6 +33,7 @@ import { ProjectSettingsModal } from "@/pages/fpb/ProjectSettingsModal";
 import { AddColumnModal } from "@/pages/fpb/AddColumnModal";
 import { ClientRounds } from "@/pages/fpb/ClientRounds";
 import { MeetingsCalendar } from "@/pages/fpb/MeetingsCalendar";
+import { PerformanceView } from "@/pages/fpb/PerformanceView";
 import {
   PROJECT_TYPES, boardStats, formatDate, getTypeInfo, initialsOf, taskTag,
 } from "@/pages/fpb/shared";
@@ -42,8 +43,8 @@ const VIEW_KEY = "fpb-view";
 /** Up to this many projects sit side by side as buttons; more become a picker. */
 const INLINE_PROJECTS = 4;
 
-type BoardView = "board" | "list" | "client" | "meetings";
-const VIEWS: BoardView[] = ["board", "list", "client", "meetings"];
+type BoardView = "board" | "list" | "metrics" | "client" | "meetings";
+const VIEWS: BoardView[] = ["board", "list", "metrics", "client", "meetings"];
 
 export default function FlowProjectBoard() {
   const { user } = useAuth();
@@ -68,6 +69,7 @@ export default function FlowProjectBoard() {
   const [newSubprojectOpen, setNewSubprojectOpen] = useState(false);
   const [addColumnOpen, setAddColumnOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"team" | "settings" | "activity">("team");
   const [newTaskColumn, setNewTaskColumn] = useState<string | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   // Which sub-project's board is showing; null lets the server pick the first.
@@ -174,9 +176,23 @@ export default function FlowProjectBoard() {
   // The sub-project actually being shown, as resolved by the server.
   const activeSubId = (board?.activeSubprojectId ?? null) as string | null;
   const activeSub = subprojects.find(s => s.id === activeSubId);
-  // Deleting a column or a sub-project is the owner's (or an admin's) call;
-  // the server checks this too.
-  const canManage = isAdmin || String(project?.createdBy ?? "") === myId;
+  // Deleting columns, sub-projects or the project: its owner, a department
+  // head or an admin. The server checks this too.
+  const canManage =
+    isAdmin || isAnyHead((user as any)?.role) || String(project?.createdBy ?? "") === myId;
+
+  const deleteTask = trpc.fpb.deleteTask.useMutation({
+    onSuccess: () => { refreshBoard(); utils.fpb.getProjects.invalidate(); toast.success("Task deleted"); },
+    onError,
+  });
+  const deleteProject = trpc.fpb.deleteProject.useMutation({
+    onSuccess: () => {
+      utils.fpb.getProjects.invalidate();
+      setSelectedId(null);
+      toast.success("Project deleted");
+    },
+    onError,
+  });
 
   const tasksByColumn = useMemo(() => {
     const map = new Map<string, any[]>();
@@ -371,6 +387,7 @@ export default function FlowProjectBoard() {
                 options={[
                   { value: "board", label: "Board" },
                   { value: "list", label: "List" },
+                  { value: "metrics", label: "Metrics" },
                   { value: "client", label: "Client" },
                   { value: "meetings", label: "Meetings" },
                 ]}
@@ -389,8 +406,17 @@ export default function FlowProjectBoard() {
                 <DropdownMenuContent align="end" className={`${t.selectContent} min-w-[220px]`}>
                   {project && (
                     <>
-                      <DropdownMenuItem onClick={() => setSettingsOpen(true)} className="cursor-pointer">
-                        <Settings className="mr-2 h-4 w-4" /> Manage project ({(project.memberIds ?? []).length})
+                      <DropdownMenuItem
+                        onClick={() => { setSettingsTab("team"); setSettingsOpen(true); }}
+                        className="cursor-pointer"
+                      >
+                        <Settings className="mr-2 h-4 w-4" /> Manage team ({(project.memberIds ?? []).length})
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => { setSettingsTab("settings"); setSettingsOpen(true); }}
+                        className="cursor-pointer"
+                      >
+                        <Pencil className="mr-2 h-4 w-4" /> Edit project
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setAddColumnOpen(true)} className="cursor-pointer">
                         <Columns3 className="mr-2 h-4 w-4" /> Add column
@@ -398,6 +424,18 @@ export default function FlowProjectBoard() {
                       <DropdownMenuItem onClick={() => setNewSubprojectOpen(true)} className="cursor-pointer">
                         <Layers className="mr-2 h-4 w-4" /> New sub-project
                       </DropdownMenuItem>
+                      {canManage && (
+                        <DropdownMenuItem
+                          onClick={() => {
+                            if (confirm(`Delete "${project.title}", its board and every task on it? This cannot be undone.`)) {
+                              deleteProject.mutate({ id: project.id });
+                            }
+                          }}
+                          className="cursor-pointer text-red-500 focus:text-red-500"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete project
+                        </DropdownMenuItem>
+                      )}
                     </>
                   )}
                   {project && mayCreate && <DropdownMenuSeparator />}
@@ -457,6 +495,17 @@ export default function FlowProjectBoard() {
           <ClientRounds projectId={activeId} projectTitle={project.title} />
         )}
 
+        {activeId && !boardLoading && project && view === "metrics" && (
+          <PerformanceView
+            projectId={activeId}
+            projectTitle={project.title}
+            users={users as any[]}
+            wideScopeLabel={
+              isAdmin ? "Whole company" : isAnyHead((user as any)?.role) ? "My departments" : "All my projects"
+            }
+          />
+        )}
+
         {activeId && !boardLoading && view === "meetings" && (
           <MeetingsCalendar
             onOpenProject={id => {
@@ -491,8 +540,15 @@ export default function FlowProjectBoard() {
                 <div className="now-stat-value">{stats.dueThisWeek}</div>
                 <div className="now-stat-label">in the next 7 days</div>
               </div>
-              <div>
-                <div className="now-stat-label">My load</div>
+              <div
+                role="button"
+                tabIndex={0}
+                title="See each person's completed tasks this month"
+                style={{ cursor: "pointer" }}
+                onClick={() => setView("metrics")}
+                onKeyDown={e => { if (e.key === "Enter") setView("metrics"); }}
+              >
+                <div className="now-stat-label">My load · Team performance →</div>
                 <div className="now-stat-value">{stats.mine} task{stats.mine === 1 ? "" : "s"}</div>
                 <div className="now-stat-label">
                   {stats.mineOverdue > 0 ? `${stats.mineOverdue} of them overdue` : "open and assigned to you"}
@@ -564,6 +620,9 @@ export default function FlowProjectBoard() {
                                             labels={labels}
                                             myId={myId}
                                             onOpen={() => setOpenTaskId(task.id)}
+                                            onDelete={() => {
+                                              if (confirm(`Delete "${task.title}"?`)) deleteTask.mutate({ id: task.id });
+                                            }}
                                           />
                                         ))}
                                         {provided.placeholder}
@@ -667,6 +726,8 @@ export default function FlowProjectBoard() {
             members={project?.memberIds ?? []}
             users={users as any[]}
             tokens={t}
+            labels={labels}
+            projectOwnerId={project?.createdBy ? String(project.createdBy) : null}
           />
           <NewSubprojectModal
             open={newSubprojectOpen}
@@ -684,7 +745,8 @@ export default function FlowProjectBoard() {
             tokens={t}
             // Only the owner (or an admin) may delete a space; a member invited
             // into it must not be able to destroy it.
-            canDelete={isAdmin || String(project?.createdBy ?? "") === (user as any)?.id}
+            canDelete={canManage}
+            initialTab={settingsTab}
             onDeleted={() => { setSettingsOpen(false); setSelectedId(null); }}
           />
         </>
@@ -699,6 +761,7 @@ export default function FlowProjectBoard() {
         columns={columns}
         labels={labels}
         projectOwnerId={project?.createdBy ? String(project.createdBy) : null}
+        canManage={canManage}
       />
     </LayoutWrapper>
   );

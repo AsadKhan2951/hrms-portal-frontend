@@ -911,3 +911,13 @@ button.now-day:hover { box-shadow: inset 0 0 0 1.5px currentColor; }
 .fpb-md blockquote { border-left: 3px solid var(--border); padding-left: 10px; color: var(--muted-foreground); }
 .fpb-md hr { border: 0; border-top: 1px solid var(--border); }
 .dark .fpb-mention, .dark .fpb-md a { color: #b9b3ff; }
+.now-kcard { position: relative; }
+.now-kcard-menu { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity 0.15s; z-index: 1; }
+.now-kcard:hover .now-kcard-menu, .now-kcard:focus-within .now-kcard-menu { opacity: 1; }
+@media (hover: none) { .now-kcard-menu { opacity: 1; } }
+.now-kcard-menu-btn {
+  width: 28px; height: 28px; border: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  background: var(--background); color: var(--muted-foreground);
+}
+.now-kcard-menu-btn:hover { color: var(--foreground); }
+.now-kcard-cover { display: block; width: calc(100% + 28px); max-height: 160px; object-fit: cover; margin: -14px -14px 0; border-radius: 14px 14px 0 0; }

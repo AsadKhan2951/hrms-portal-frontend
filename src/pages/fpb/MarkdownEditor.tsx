@@ -5,7 +5,7 @@ import {
 
 import { Avatar } from "@/pages/fpb/shared";
 import { Markdown } from "./Markdown";
-import { mentionToken } from "./markdownParser";
+import { displayToMentions, mentionsToDisplay } from "./markdownParser";
 
 export type MentionPerson = { id: string; name?: string | null; employeeId?: string | null; avatar?: string | null };
 
@@ -37,6 +37,14 @@ export function MarkdownEditor({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [tab, setTab] = useState<"write" | "preview">("write");
+
+  // The textarea shows "@Muhammad Hassan"; the stored text keeps the id as
+  // "@[Muhammad Hassan](user:<id>)". Everyone mentioned so far is remembered
+  // here so the plain names can be turned back into mentions on every change.
+  const known = useRef(new Map<string, string>());
+  const { display, people: inText } = mentionsToDisplay(value);
+  inText.forEach((id, name) => known.current.set(name, id));
+  const emit = (nextDisplay: string) => onChange(displayToMentions(nextDisplay, known.current));
   // The @ being typed: where it starts and what follows it so far.
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [highlight, setHighlight] = useState(0);
@@ -77,12 +85,14 @@ export function MarkdownEditor({
   const pick = (person: MentionPerson) => {
     if (!mention) return;
     const el = ref.current;
-    const caret = el?.selectionStart ?? value.length;
-    const token = `${mentionToken(person)} `;
-    const next = value.slice(0, mention.start) + token + value.slice(caret);
-    onChange(next);
+    const caret = el?.selectionStart ?? display.length;
+    const name = (person.name || person.employeeId || "someone").replace(/[\[\]\n]/g, "").slice(0, 80);
+    known.current.set(name, person.id);
+    const inserted = `@${name} `;
+    const next = display.slice(0, mention.start) + inserted + display.slice(caret);
+    emit(next);
     setMention(null);
-    restore(mention.start + token.length);
+    restore(mention.start + inserted.length);
   };
 
   /** Wraps the selection, e.g. **bold**; with nothing selected inserts a placeholder. */
@@ -90,9 +100,9 @@ export function MarkdownEditor({
     const el = ref.current;
     if (!el) return;
     const { selectionStart: s, selectionEnd: e } = el;
-    const selected = value.slice(s, e) || fallback;
-    const next = value.slice(0, s) + before + selected + after + value.slice(e);
-    onChange(next);
+    const selected = display.slice(s, e) || fallback;
+    const next = display.slice(0, s) + before + selected + after + display.slice(e);
+    emit(next);
     restore(s + before.length, s + before.length + selected.length);
   };
 
@@ -101,12 +111,12 @@ export function MarkdownEditor({
     const el = ref.current;
     if (!el) return;
     const { selectionStart: s, selectionEnd: e } = el;
-    const lineStart = value.lastIndexOf("\n", s - 1) + 1;
-    const block = value.slice(lineStart, e);
+    const lineStart = display.lastIndexOf("\n", s - 1) + 1;
+    const block = display.slice(lineStart, e);
     const lines = block.split("\n");
     const replaced = lines.map((line, i) => prefix(i) + line).join("\n");
-    const next = value.slice(0, lineStart) + replaced + value.slice(e);
-    onChange(next);
+    const next = display.slice(0, lineStart) + replaced + display.slice(e);
+    emit(next);
     restore(lineStart, lineStart + replaced.length);
   };
 
@@ -114,10 +124,10 @@ export function MarkdownEditor({
     const el = ref.current;
     if (!el) return;
     const caret = el.selectionStart;
-    const needsSpace = caret > 0 && !/\s/.test(value[caret - 1]);
+    const needsSpace = caret > 0 && !/\s/.test(display[caret - 1]);
     const ins = `${needsSpace ? " " : ""}@`;
-    const next = value.slice(0, caret) + ins + value.slice(el.selectionEnd);
-    onChange(next);
+    const next = display.slice(0, caret) + ins + display.slice(el.selectionEnd);
+    emit(next);
     setMention({ start: caret + ins.length - 1, query: "" });
     setHighlight(0);
     restore(caret + ins.length);
@@ -194,16 +204,16 @@ export function MarkdownEditor({
         <div className="relative">
           <textarea
             ref={ref}
-            value={value}
+            value={display}
             rows={rows}
             autoFocus={autoFocus}
             placeholder={placeholder}
             onChange={e => {
-              onChange(e.target.value);
+              emit(e.target.value);
               detectMention(e.target.value, e.target.selectionStart);
             }}
             onKeyDown={onKeyDown}
-            onClick={e => detectMention(value, e.currentTarget.selectionStart)}
+            onClick={e => detectMention(display, e.currentTarget.selectionStart)}
             onBlur={() => setTimeout(() => setMention(null), 150)}
             className={`block w-full resize-y bg-transparent px-3 py-2 text-sm outline-none ${tokens.textPrimary}`}
           />

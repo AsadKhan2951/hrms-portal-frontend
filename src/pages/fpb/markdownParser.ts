@@ -133,6 +133,8 @@ export function parseInline(text: string): Inline[] {
 const BULLET = /^\s*[-*+]\s+(.*)$/;
 const ORDERED = /^\s*\d+[.)]\s+(.*)$/;
 const CHECK = /^\[( |x|X)\]\s+(.*)$/;
+/** "[x] Item" on its own line, without a bullet: how older descriptions were written. */
+const BARE_CHECK = /^\s*\[( |x|X)\]\s+(.*)$/;
 
 export function parseMarkdown(source: string | null | undefined): Block[] {
   const lines = (source ?? "").replace(/\r\n?/g, "\n").split("\n");
@@ -200,6 +202,18 @@ export function parseMarkdown(source: string | null | undefined): Block[] {
       continue;
     }
 
+    if (BARE_CHECK.test(line)) {
+      flushParagraph();
+      const items: ListItem[] = [];
+      while (i < lines.length && BARE_CHECK.test(lines[i])) {
+        const m = BARE_CHECK.exec(lines[i])!;
+        items.push({ checked: m[1].toLowerCase() === "x", line: i, children: parseInline(m[2]) });
+        i += 1;
+      }
+      blocks.push({ type: "list", ordered: false, items });
+      continue;
+    }
+
     const ordered = ORDERED.test(line);
     if (ordered || BULLET.test(line)) {
       flushParagraph();
@@ -231,7 +245,7 @@ export function toggleChecklistLine(source: string, line: number): string {
   const lines = source.replace(/\r\n?/g, "\n").split("\n");
   const current = lines[line];
   if (current === undefined) return source;
-  lines[line] = current.replace(/^(\s*[-*+]\s+)\[( |x|X)\]/, (_m, lead: string, mark: string) =>
+  lines[line] = current.replace(/^(\s*(?:[-*+]\s+)?)\[( |x|X)\]/, (_m, lead: string, mark: string) =>
     `${lead}[${mark === " " ? "x" : " "}]`
   );
   return lines.join("\n");
@@ -256,4 +270,38 @@ export function checklistProgress(source: string | null | undefined): { done: nu
 export function mentionToken(user: { id: string; name?: string | null; employeeId?: string | null }): string {
   const name = (user.name || user.employeeId || "someone").replace(/[\[\]\n]/g, "").slice(0, 80);
   return `@[${name}](user:${user.id})`;
+}
+
+// ------------------------------------------------------------------ editing
+
+const TOKEN_RE = /@\[([^\]\n]{1,80})\]\(user:([0-9a-fA-F]{24})\)/g;
+
+/**
+ * What the editor shows: "@Muhammad Hassan" instead of the stored
+ * "@[Muhammad Hassan](user:<id>)". Returns the people it found, so the text can
+ * be turned back into stored form after editing.
+ */
+export function mentionsToDisplay(text: string): { display: string; people: Map<string, string> } {
+  const people = new Map<string, string>();
+  const display = text.replace(TOKEN_RE, (_m, name: string, id: string) => {
+    people.set(name, id.toLowerCase());
+    return `@${name}`;
+  });
+  return { display, people };
+}
+
+function escapeRe(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Back to stored form: every "@Name" of a known person becomes a mention token.
+ * Longer names go first, so "@Ali Khan" is not caught as "@Ali". A name the
+ * user has broken by editing it simply stays plain text.
+ */
+export function displayToMentions(display: string, people: Map<string, string>): string {
+  const names = [...people.keys()].sort((a, b) => b.length - a.length);
+  if (names.length === 0) return display;
+  const re = new RegExp(`@(${names.map(escapeRe).join("|")})(?![\\p{L}\\p{N}_])`, "gu");
+  return display.replace(re, (_m, name: string) => `@[${name}](user:${people.get(name)})`);
 }

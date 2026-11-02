@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  ArrowRightLeft, Calendar, Check, History, Loader2, MessageSquare, Pencil, Plus, Tag, Trash2,
-  UserPlus, X,
+  ArrowRightLeft, Calendar, Check, History, Loader2, MessageSquare, Paperclip, Pencil, Plus, Tag,
+  Trash2, UserPlus, X,
 } from "lucide-react";
 
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -23,6 +23,7 @@ import {
 import { Markdown } from "./Markdown";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { toggleChecklistLine } from "./markdownParser";
+import { TaskAttachments, attachmentInputId } from "./TaskAttachments";
 
 /** Trello's label palette. */
 export const LABEL_COLORS = [
@@ -40,6 +41,7 @@ const COMMENT_ACTIONS = new Set(["commented on", "edited a comment", "deleted a 
  */
 export function TaskDetailModal({
   taskId, onClose, projectId, members, users, tokens, columns = [], labels = [], projectOwnerId,
+  canManage: canManageProp,
 }: {
   taskId: string | null; onClose: () => void; projectId: string;
   /** The project's members (ids). */
@@ -50,13 +52,15 @@ export function TaskDetailModal({
   labels?: any[];
   /** The project's creator: on the project, so assignable and mentionable. */
   projectOwnerId?: string | null;
+  /** Owner, department head or admin: may remove anyone's files and labels. */
+  canManage?: boolean;
 }) {
   const utils = trpc.useUtils();
   const open = taskId !== null;
   const { user } = useAuth();
   const myId = (user as any)?.id ? String((user as any).id) : null;
   const orgWide = isOrgWide((user as any)?.role);
-  const canManageLabels = orgWide || (projectOwnerId ?? "") === myId;
+  const canManageLabels = canManageProp ?? (orgWide || (projectOwnerId ?? "") === myId);
 
   const { data, isLoading } = trpc.fpb.getTask.useQuery(
     { id: taskId ?? "" },
@@ -67,6 +71,7 @@ export function TaskDetailModal({
   const subtasks = (data?.subtasks ?? []) as any[];
   const comments = (data?.comments ?? []) as any[];
   const activity = ((data as any)?.activity ?? []) as any[];
+  const attachments = ((data as any)?.attachments ?? []) as any[];
   const cardMemberIds = ((data as any)?.memberIds ?? []) as string[];
 
   const [title, setTitle] = useState("");
@@ -406,6 +411,17 @@ export function TaskDetailModal({
                   )}
                 </section>
 
+                {/* Files on the card */}
+                <TaskAttachments
+                  taskId={task.id}
+                  attachments={attachments}
+                  users={users}
+                  tokens={tokens}
+                  myId={myId}
+                  canManage={canManageLabels}
+                  onChanged={refresh}
+                />
+
                 {/* Checklist (the card's subtasks) */}
                 <section>
                   <div className="flex items-center justify-between mb-1.5">
@@ -711,6 +727,11 @@ export function TaskDetailModal({
                       />
                     </PopoverContent>
                   </Popover>
+
+                  {/* Attachment: opens the file picker of the Attachments section */}
+                  <label htmlFor={attachmentInputId(task.id)} className={`fpb-side-btn cursor-pointer ${tokens.tagBg}`}>
+                    <Paperclip className="w-3.5 h-3.5" /> Attachment
+                  </label>
 
                   {/* Due date */}
                   <Popover>

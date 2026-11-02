@@ -25,10 +25,12 @@ function toDateInput(value: unknown): string {
 
 /** Team, project settings and activity for one project (Jira's project settings). */
 export function ProjectSettingsModal({
-  open, onClose, projectId, users, tokens, canDelete, onDeleted,
+  open, onClose, projectId, users, tokens, canDelete, onDeleted, initialTab = "team",
 }: {
   open: boolean; onClose: () => void; projectId: string; users: any[];
   tokens: any; canDelete: boolean; onDeleted: () => void;
+  /** Which tab to open on: Team for "Manage project", Settings for "Edit project". */
+  initialTab?: "team" | "settings" | "activity";
 }) {
   const utils = trpc.useUtils();
 
@@ -137,7 +139,7 @@ export function ProjectSettingsModal({
               </DialogDescription>
             </DialogHeader>
 
-            <Tabs defaultValue="team" className="mt-1">
+            <Tabs key={`${projectId}-${initialTab}`} defaultValue={initialTab} className="mt-1">
               <TabsList className={tokens.surface}>
                 <TabsTrigger value="team">Team ({memberIds.length})</TabsTrigger>
                 <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -159,7 +161,8 @@ export function ProjectSettingsModal({
                         disabled={updateMembers.isPending}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border transition-all disabled:opacity-50 ${
                           on
-                            ? "bg-[#4233e0]/30 border-[#4233e0] text-[#c9c4ff]"
+                            // Solid, so the name stays readable in both light and dark themes.
+                            ? "bg-[#4233e0] border-[#4233e0] text-white"
                             : `${tokens.tagBg} ${tokens.border} ${tokens.textSecondary} hover:border-[#8f86ff]`
                         }`}
                       >
