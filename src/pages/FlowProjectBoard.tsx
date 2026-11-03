@@ -34,6 +34,7 @@ import { AddColumnModal } from "@/pages/fpb/AddColumnModal";
 import { ClientRounds } from "@/pages/fpb/ClientRounds";
 import { MeetingsCalendar } from "@/pages/fpb/MeetingsCalendar";
 import { PerformanceView } from "@/pages/fpb/PerformanceView";
+import { EmployeePicker } from "@/pages/fpb/EmployeePicker";
 import {
   PROJECT_TYPES, boardStats, formatDate, getTypeInfo, initialsOf, taskTag,
 } from "@/pages/fpb/shared";
@@ -75,8 +76,26 @@ export default function FlowProjectBoard() {
   // Which sub-project's board is showing; null lets the server pick the first.
   const [subId, setSubId] = useState<string | null>(null);
 
+  // Heads (and admins) can switch to one of their employees and see that
+  // person's projects and boards instead of their own.
+  const canPickEmployee = isAnyHead((user as any)?.role);
+  const [employeeId, setEmployeeId] = useState<string | null>(null);
+  const { data: teamPeople = [] } = trpc.fpb.getTeamMembers.useQuery(undefined, {
+    enabled: canPickEmployee,
+  });
+  const employee = (teamPeople as any[]).find(p => p.id === employeeId) ?? null;
+  // Whose load the board highlights: the chosen employee's, else the viewer's.
+  const focusId = employeeId ?? myId;
+
   const { data: projects = [], isLoading: projectsLoading } =
-    trpc.fpb.getProjects.useQuery(filterType !== "all" ? { projectType: filterType } : undefined);
+    trpc.fpb.getProjects.useQuery(
+      filterType !== "all" || employeeId
+        ? {
+            ...(filterType !== "all" ? { projectType: filterType } : {}),
+            ...(employeeId ? { employeeId } : {}),
+          }
+        : undefined
+    );
   const { data: users = [] } = trpc.fpb.getUsers.useQuery();
   // Opening a project is a granted right now, so the button is hidden rather
   // than offered and then refused. The server checks this again.
@@ -91,9 +110,17 @@ export default function FlowProjectBoard() {
   }, [projects, selectedId]);
 
   useEffect(() => {
-    if (!activeId) return;
+    // An employee's project is a visit, not the viewer's own last choice.
+    if (!activeId || employeeId) return;
     try { localStorage.setItem(SELECTED_KEY, activeId); } catch { /* private mode */ }
-  }, [activeId]);
+  }, [activeId, employeeId]);
+
+  const chooseEmployee = (id: string | null) => {
+    setEmployeeId(id);
+    setSearch("");
+    // Their first project; back on your own, the one you last had open.
+    try { setSelectedId(id ? null : localStorage.getItem(SELECTED_KEY)); } catch { setSelectedId(null); }
+  };
 
   useEffect(() => {
     try { localStorage.setItem(VIEW_KEY, view); } catch { /* private mode */ }
@@ -205,7 +232,7 @@ export default function FlowProjectBoard() {
     return map;
   }, [tasks]);
 
-  const stats = useMemo(() => boardStats(tasks, myId), [tasks, myId]);
+  const stats = useMemo(() => boardStats(tasks, focusId), [tasks, focusId]);
 
   const visibleProjects = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -291,13 +318,21 @@ export default function FlowProjectBoard() {
         {/* ───────────────────────── Project, sub-project, view, new task */}
         <div className="now-board-bar">
           <div className="now-board-bar-left">
+            {canPickEmployee && (isAdmin || (teamPeople as any[]).length > 0) && (
+              <EmployeePicker
+                people={teamPeople as any[]}
+                value={employeeId}
+                onChange={chooseEmployee}
+                meLabel={isAdmin ? "All projects" : "My projects"}
+              />
+            )}
             {!usePicker && (projects as any[]).length > 1 && (
               <Segmented
                 label="Project"
                 tone="ink"
                 value={activeId ?? ""}
                 onChange={id => setSelectedId(id)}
-                options={(projects as any[]).map(p => ({ value: p.id, label: p.viaTeam ? `${p.title} (team)` : p.title }))}
+                options={(projects as any[]).map(p => ({ value: p.id, label: p.title }))}
               />
             )}
 
@@ -348,7 +383,6 @@ export default function FlowProjectBoard() {
                           <span className="block truncate font-semibold">{p.title}</span>
                           <span className="now-row-sub">
                             {getTypeInfo(p.projectType).short} · {p.completedTasks}/{p.taskCount} done
-                            {p.viaTeam && " · Your team"}
                           </span>
                         </span>
                         {p.id === activeId && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
@@ -464,21 +498,24 @@ export default function FlowProjectBoard() {
         {/* ───────────────────────── Nothing to show yet */}
         {projectsLoading && (
           <div className="now-card items-center py-14 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> Loading your projects
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+            {employee ? ` Loading ${employee.name}'s projects` : " Loading your projects"}
           </div>
         )}
 
         {!activeId && !projectsLoading && (
           <div className="now-card items-center py-14 text-center">
-            <div className="now-lede">No projects yet</div>
+            <div className="now-lede">{employee ? `${employee.name} is on no projects yet` : "No projects yet"}</div>
             <p className="now-muted" style={{ maxWidth: 420 }}>
-              {filterType !== "all"
+              {employee
+                ? "Once they create a project or are added to one, its board shows here."
+                : filterType !== "all"
                 ? "No project of this type. Choose another type in the project picker."
                 : mayCreate
                   ? "Create your first project and its board appears here."
                   : "You will see a project here once you are added to one."}
             </p>
-            {mayCreate && filterType === "all" && (
+            {mayCreate && filterType === "all" && !employee && (
               <button type="button" className="now-btn lime lg" onClick={() => setNewProjectOpen(true)}>
                 New project
               </button>
@@ -549,10 +586,14 @@ export default function FlowProjectBoard() {
                 onClick={() => setView("metrics")}
                 onKeyDown={e => { if (e.key === "Enter") setView("metrics"); }}
               >
-                <div className="now-stat-label">My load · Team performance →</div>
+                <div className="now-stat-label">
+                  {employee ? `${employee.name.split(" ")[0]}'s load` : "My load"} · Team performance →
+                </div>
                 <div className="now-stat-value">{stats.mine} task{stats.mine === 1 ? "" : "s"}</div>
                 <div className="now-stat-label">
-                  {stats.mineOverdue > 0 ? `${stats.mineOverdue} of them overdue` : "open and assigned to you"}
+                  {stats.mineOverdue > 0
+                    ? `${stats.mineOverdue} of them overdue`
+                    : employee ? "open and assigned to them" : "open and assigned to you"}
                 </div>
               </div>
             </section>
@@ -619,7 +660,7 @@ export default function FlowProjectBoard() {
                                             index={index}
                                             users={users as any[]}
                                             labels={labels}
-                                            myId={myId}
+                                            myId={focusId}
                                             onOpen={() => setOpenTaskId(task.id)}
                                             onDelete={() => {
                                               if (confirm(`Delete "${task.title}"?`)) deleteTask.mutate({ id: task.id });
@@ -682,7 +723,7 @@ export default function FlowProjectBoard() {
                             {assignee ? (
                               <span
                                 title={assignee.name}
-                                className={`now-kavatar${myId && assignee.id === myId ? " me" : ""}`}
+                                className={`now-kavatar${focusId && assignee.id === focusId ? " me" : ""}`}
                               >
                                 {initialsOf(assignee)}
                               </span>

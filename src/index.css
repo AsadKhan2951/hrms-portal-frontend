@@ -597,6 +597,8 @@ button.now-day:hover { box-shadow: inset 0 0 0 1.5px currentColor; }
   border: 0; border-radius: 14px; background: var(--card); color: var(--foreground); font-weight: 700; font-size: 14px;
 }
 .now-pick:hover { box-shadow: inset 0 0 0 1.5px var(--foreground); }
+/* Showing an employee's projects rather than your own. */
+.now-pick.now-pick-on, .now-pick.now-pick-on:hover { box-shadow: inset 0 0 0 2px #4233e0; }
 .now-pick-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 52px;
   padding: 8px 12px; border: 0; border-radius: 12px; background: transparent; color: var(--foreground); text-align: left;
