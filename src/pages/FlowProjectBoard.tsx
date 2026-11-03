@@ -297,7 +297,7 @@ export default function FlowProjectBoard() {
                 tone="ink"
                 value={activeId ?? ""}
                 onChange={id => setSelectedId(id)}
-                options={(projects as any[]).map(p => ({ value: p.id, label: p.title }))}
+                options={(projects as any[]).map(p => ({ value: p.id, label: p.viaTeam ? `${p.title} (team)` : p.title }))}
               />
             )}
 
@@ -348,6 +348,7 @@ export default function FlowProjectBoard() {
                           <span className="block truncate font-semibold">{p.title}</span>
                           <span className="now-row-sub">
                             {getTypeInfo(p.projectType).short} · {p.completedTasks}/{p.taskCount} done
+                            {p.viaTeam && " · Your team"}
                           </span>
                         </span>
                         {p.id === activeId && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
