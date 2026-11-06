@@ -1,9 +1,7 @@
 import AdminLayout from "@/components/AdminLayout";
 import { useState, useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { NowPageHeader, Segmented } from "@/components/now/NowPage";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -26,6 +24,7 @@ import { isOrgWide } from "@/lib/roles";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { trpc } from "@/lib/trpc";
+import "./adminB.css";
 
 export default function FormResponses() {
   const { user } = useAuth();
@@ -40,10 +39,6 @@ export default function FormResponses() {
     onSuccess: () => utils.admin.getFormSubmissions.invalidate(),
   });
 
-  if (user && !isOrgWide(user.role)) {
-    return <Redirect to="/dashboard" />;
-  }
-
   const statusMap: Record<string, "pending" | "reviewed" | "resolved"> = {
     submitted: "pending",
     under_review: "reviewed",
@@ -57,6 +52,11 @@ export default function FormResponses() {
       return statusMap[form.status] === filter;
     });
   }, [formSubmissions, filter]);
+
+  // Checked after every hook has run so the hook order never changes.
+  if (user && !isOrgWide(user.role)) {
+    return <Redirect to="/dashboard" />;
+  }
 
   const openViewDialog = (form: any) => {
     setSelectedForm(form);
@@ -80,18 +80,16 @@ export default function FormResponses() {
 
   const getStatusBadge = (status: string) => {
     const normalized = statusMap[status] || "pending";
-    const config: Record<string, { variant: "default" | "secondary" | "destructive", className: string }> = {
-      pending: { variant: "secondary", className: "bg-yellow-500/10 text-yellow-600" },
-      reviewed: { variant: "default", className: "bg-blue-500/10 text-blue-600" },
-      resolved: { variant: "default", className: "bg-green-500/10 text-green-600" },
+    const config: Record<string, string> = {
+      pending: "now-pill warn-soft",
+      reviewed: "now-pill nb-info-soft",
+      resolved: "now-pill nb-ok-soft",
     };
 
-    const { variant, className } = config[normalized] || config.pending;
-
     return (
-      <Badge variant={variant} className={className}>
+      <span className={config[normalized] || config.pending}>
         {normalized}
-      </Badge>
+      </span>
     );
   };
 
@@ -99,124 +97,94 @@ export default function FormResponses() {
 
   return (
     <AdminLayout title="Form Responses">
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <MessageSquareText className="h-6 w-6" />
-              Form Responses
+      <div className="now-page">
+        <NowPageHeader
+          title={
+            <span className="inline-flex flex-wrap items-center gap-3">
+              Form responses
               {pendingCount > 0 && (
-                <Badge variant="destructive" className="ml-2">
+                <span className="now-pill risk md" style={{ fontFamily: "var(--font-body)", letterSpacing: 0 }}>
                   {pendingCount} pending
-                </Badge>
+                </span>
               )}
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Review and respond to employee form submissions
-            </p>
-          </div>
-        </div>
+            </span>
+          }
+          subtitle="Review and respond to employee form submissions"
+        />
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={filter === "pending" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter("pending")}
-          >
-            Pending ({pendingCount})
-          </Button>
-          <Button
-            variant={filter === "all" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter("all")}
-          >
-            All
-          </Button>
-          <Button
-            variant={filter === "reviewed" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter("reviewed")}
-          >
-            Reviewed
-          </Button>
-          <Button
-            variant={filter === "resolved" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter("resolved")}
-          >
-            Resolved
-          </Button>
-        </div>
+        <Segmented
+          label="Show"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "pending", label: `Pending (${pendingCount})` },
+            { value: "all", label: "All" },
+            { value: "reviewed", label: "Reviewed" },
+            { value: "resolved", label: "Resolved" },
+          ]}
+        />
 
-        <div className="grid gap-4">
+        <section className="now-card flush" style={{ paddingTop: 8 }} aria-label="Form submissions">
           {isLoading ? (
-            <Card className="p-12">
-              <div className="flex items-center justify-center text-muted-foreground">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-            </Card>
+            <div className="now-row now-muted" style={{ borderTop: 0 }}>
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Loading...
+              </span>
+            </div>
           ) : (
-            filteredForms.map((form: any) => (
-              <Card key={form.id} className="p-6">
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-primary/10 rounded-lg">
-                        <User className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold">{form.user?.name || "Employee"}</h3>
-                        <p className="text-sm text-muted-foreground">{form.user?.employeeId || "--"}</p>
-                      </div>
-                    </div>
+            filteredForms.map((form: any, index: number) => (
+              <article
+                key={form.id}
+                className="now-row wrap"
+                style={{ padding: "16px 0", alignItems: "flex-start", borderTop: index === 0 ? 0 : undefined }}
+              >
+                <div style={{ flex: "2 1 300px", minWidth: 0 }}>
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <span className="now-pill nb-plain">{form.formType}</span>
                     {getStatusBadge(form.status)}
                   </div>
-
-                  <div>
-                    <Badge variant="outline" className="mb-2">
-                      {form.formType}
-                    </Badge>
-                    <h4 className="font-semibold mb-2">{form.subject}</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {form.content}
-                    </p>
+                  <div className="now-row-title">{form.subject}</div>
+                  <div className="now-row-sub flex items-center gap-1.5">
+                    <User className="h-3 w-3 shrink-0" aria-hidden="true" />
+                    {form.user?.name || "Employee"} · {form.user?.employeeId || "--"}
                   </div>
-
-                  <div className="flex items-center justify-between pt-4 border-t">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      Submitted on {form.createdAt ? format(new Date(form.createdAt), "MMM dd, yyyy 'at' HH:mm") : "--"}
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openViewDialog(form)}
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      View & Respond
-                    </Button>
+                  <p className="now-body-2 mt-1.5 line-clamp-2">
+                    {form.content}
+                  </p>
+                  <div className="now-row-sub mt-1.5 flex items-center gap-1.5">
+                    <Clock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                    Submitted on {form.createdAt ? format(new Date(form.createdAt), "MMM dd, yyyy 'at' HH:mm") : "--"}
                   </div>
                 </div>
-              </Card>
+                <div style={{ flex: "0 0 auto" }}>
+                  <button
+                    type="button"
+                    className="now-btn sm ground"
+                    onClick={() => openViewDialog(form)}
+                  >
+                    <Eye className="h-4 w-4" aria-hidden="true" />
+                    View & Respond
+                  </button>
+                </div>
+              </article>
             ))
           )}
 
           {!isLoading && filteredForms.length === 0 && (
-            <Card className="p-12">
-              <div className="text-center text-muted-foreground">
-                <MessageSquareText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No form submissions found</p>
-                <p className="text-sm mt-1">
+            <div className="now-row" style={{ borderTop: 0, justifyContent: "center", padding: "40px 0 48px" }}>
+              <div className="text-center">
+                <MessageSquareText className="mx-auto mb-3 h-10 w-10 text-muted-foreground opacity-50" aria-hidden="true" />
+                <p className="now-lede">No form submissions found</p>
+                <p className="now-muted mt-1 text-sm">
                   {filter === "pending" ? "All forms have been reviewed" : "Try adjusting your filter"}
                 </p>
               </div>
-            </Card>
+            </div>
           )}
-        </div>
+        </section>
 
         <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Form Submission Details</DialogTitle>
               <DialogDescription>
@@ -225,45 +193,46 @@ export default function FormResponses() {
             </DialogHeader>
 
             {selectedForm && (
-              <div className="space-y-4 py-4">
-                <div className="p-4 bg-muted rounded-lg space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Employee:</span>
-                    <span className="text-sm">{selectedForm.user?.name || "Employee"} ({selectedForm.user?.employeeId || "--"})</span>
+              <div className="flex flex-col gap-4 py-2">
+                <div className="nb-well nb-kv">
+                  <div>
+                    <span>Employee</span>
+                    <span>{selectedForm.user?.name || "Employee"} ({selectedForm.user?.employeeId || "--"})</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Form Type:</span>
-                    <Badge variant="outline">{selectedForm.formType}</Badge>
+                  <div>
+                    <span>Form Type</span>
+                    <span className="now-pill nb-plain" style={{ background: "var(--card)" }}>{selectedForm.formType}</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Status:</span>
+                  <div>
+                    <span>Status</span>
                     {getStatusBadge(selectedForm.status)}
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Submitted:</span>
-                    <span className="text-sm">
+                  <div>
+                    <span>Submitted</span>
+                    <span>
                       {selectedForm.createdAt ? format(new Date(selectedForm.createdAt), "MMM dd, yyyy 'at' HH:mm") : "--"}
                     </span>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Subject</label>
-                  <div className="p-3 bg-muted rounded-lg">
-                    <p className="text-sm">{selectedForm.subject}</p>
+                <div>
+                  <span className="nb-label">Subject</span>
+                  <div className="nb-well">
+                    <p className="text-sm font-semibold">{selectedForm.subject}</p>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Message</label>
-                  <div className="p-3 bg-muted rounded-lg">
-                    <p className="text-sm whitespace-pre-wrap">{selectedForm.content}</p>
+                <div>
+                  <span className="nb-label">Message</span>
+                  <div className="nb-well">
+                    <p className="text-sm whitespace-pre-wrap break-words">{selectedForm.content}</p>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Your Response</label>
+                <div>
+                  <label htmlFor="form-response" className="nb-label">Your Response</label>
                   <Textarea
+                    id="form-response"
                     placeholder="Add your response or action taken..."
                     value={responseText}
                     onChange={(e) => setResponseText(e.target.value)}
@@ -273,25 +242,27 @@ export default function FormResponses() {
               </div>
             )}
 
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
+            <DialogFooter className="flex-wrap gap-2">
+              <button type="button" className="now-btn sm ground" onClick={() => setViewDialogOpen(false)}>
                 Close
-              </Button>
-              <Button
-                variant="outline"
+              </button>
+              <button
+                type="button"
+                className="now-btn sm tint"
                 onClick={() => handleRespond("reviewed")}
                 disabled={updateFormMutation.isPending}
               >
                 Mark as Reviewed
-              </Button>
-              <Button
+              </button>
+              <button
+                type="button"
+                className="now-btn sm ink"
                 onClick={() => handleRespond("resolved")}
-                className="bg-green-600 hover:bg-green-700"
                 disabled={updateFormMutation.isPending}
               >
-                <CheckCircle2 className="h-4 w-4 mr-1" />
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                 {updateFormMutation.isPending ? "Saving..." : "Mark as Resolved"}
-              </Button>
+              </button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

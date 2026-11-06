@@ -1,4 +1,4 @@
-import { Briefcase, Code2, DollarSign, Layers, Lightbulb } from "lucide-react";
+import { Briefcase, Check, Code2, DollarSign, Layers, Lightbulb } from "lucide-react";
 
 /**
  * Shared board vocabulary.
@@ -22,6 +22,56 @@ export const PROJECT_TYPES: {
   { value: "other", label: "Others", short: "Other", icon: <Layers className="w-4 h-4" />, color: "text-slate-400" },
 ];
 
+/** What a project covers. A project can have several. Replaces the old project types. */
+export type ProjectScope = "social_media" | "design" | "saas" | "website";
+export const PROJECT_SCOPES: { value: ProjectScope; label: string }[] = [
+  { value: "social_media", label: "Social Media" },
+  { value: "design", label: "Design" },
+  { value: "saas", label: "SaaS" },
+  { value: "website", label: "Website" },
+];
+
+/** "Website, Design", or "No scope" for projects made before scopes existed. */
+export function scopeLabel(scopes: string[] | null | undefined) {
+  const labels = (scopes ?? [])
+    .map(s => PROJECT_SCOPES.find(x => x.value === s)?.label)
+    .filter(Boolean);
+  return labels.length > 0 ? labels.join(", ") : "No scope";
+}
+
+/** Toggle chips for picking one or more scopes. */
+export function ScopePicker({
+  value, onChange,
+}: { value: string[]; onChange: (next: ProjectScope[]) => void }) {
+  return (
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Scope">
+      {PROJECT_SCOPES.map(s => {
+        const on = value.includes(s.value);
+        return (
+          <button
+            key={s.value}
+            type="button"
+            aria-pressed={on}
+            onClick={() =>
+              onChange(
+                (on ? value.filter(v => v !== s.value) : [...value, s.value]) as ProjectScope[]
+              )
+            }
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors ${
+              on
+                ? "border-[#4233e0] bg-[#4233e0] text-white"
+                : "border-border bg-card text-foreground hover:bg-muted"
+            }`}
+          >
+            {on && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
+            {s.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export const PRIORITY_COLORS: Record<Priority, string> = {
   low: "bg-slate-500/20 text-slate-400",
   medium: "bg-blue-500/20 text-blue-400",
@@ -35,12 +85,32 @@ export const COLUMN_COLORS = [
 ];
 
 export const STATUS_LABELS: Record<string, string> = {
+  backlog: "Backlog",
   todo: "To do",
   in_progress: "In progress",
   in_review: "In review",
   blocked: "Blocked",
   done: "Done",
 };
+
+/** The department board's columns: the stages every task moves through. */
+export const TASK_STAGES: { value: string; label: string; color: string }[] = [
+  { value: "backlog", label: "Backlog", color: "#6b7280" },
+  { value: "todo", label: "To Do", color: "#3b82f6" },
+  { value: "in_progress", label: "In Progress", color: "#f59e0b" },
+  { value: "in_review", label: "In Review", color: "#8b5cf6" },
+  { value: "done", label: "Done", color: "#10b981" },
+];
+
+/** "3h", "2d 4h", "12m": how long a task spent somewhere. */
+export function formatDuration(ms: number) {
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h${minutes % 60 ? ` ${minutes % 60}m` : ""}`;
+  const days = Math.floor(hours / 24);
+  return `${days}d${hours % 24 ? ` ${hours % 24}h` : ""}`;
+}
 
 export function getTypeInfo(type: string) {
   return PROJECT_TYPES.find(t => t.value === type) ?? PROJECT_TYPES[4];

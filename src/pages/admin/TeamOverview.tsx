@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useContext, useMemo } from "react";
 import { Link, Redirect } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 import { CalendarClock, Clock, Loader2, RefreshCcw, Users } from "lucide-react";
@@ -7,9 +7,9 @@ import AdminLayout from "@/components/AdminLayout";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { isAnyHead } from "@/lib/roles";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { AdminShellContext } from "@/components/portal";
+import { NowHeaderTools, NowPageHeader } from "@/components/now/NowPage";
+import "./adminB.css";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -40,130 +40,151 @@ export default function TeamOverview() {
   const deptLabel = (data?.departments ?? []).map(d => d.name).join(", ");
   const periodLabel = data ? `${MONTHS[data.period.month - 1]} ${data.period.year}` : "";
 
+  const pendingLeave = members.reduce((n, m) => n + m.pendingLeaveCount, 0);
+  const missingClockOuts = members.reduce((n, m) => n + m.missingClockOuts, 0);
+
   return (
     <AdminLayout>
-      <div className="space-y-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-semibold flex items-center gap-2">
-              <Users className="h-6 w-6" /> My Team
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+      <div className="now-page">
+        <NowPageHeader
+          title="My team"
+          subtitle={
+            <>
               {deptLabel ? deptLabel : "Your department"}
               {periodLabel && <> · attendance for {periodLabel}</>}
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => utils.team.getOverview.invalidate()}
-          >
-            <RefreshCcw className="h-4 w-4 mr-1.5" /> Refresh
-          </Button>
-        </div>
+            </>
+          }
+          actions={
+            <div className="now-header-actions">
+              <button
+                type="button"
+                className="now-btn sm white"
+                onClick={() => utils.team.getOverview.invalidate()}
+              >
+                <RefreshCcw className="h-4 w-4" aria-hidden="true" /> Refresh
+              </button>
+              <ShellTools />
+            </div>
+          }
+        />
 
         {isLoading && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground p-6">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading your team...
+          <div className="now-card items-center py-14 text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> Loading your team...
+            </span>
           </div>
         )}
 
         {isError && (
-          <Card className="p-4 border-red-500/40 bg-red-500/5">
-            <p className="text-sm text-red-500">
+          <div className="now-card py-8">
+            <p className="nb-bad text-sm">
               {error?.message || "Could not load your team."}
             </p>
-          </Card>
+          </div>
         )}
 
         {!isLoading && !isError && members.length === 0 && (
-          <Card className="p-6">
-            <p className="text-sm text-muted-foreground">
+          <div className="now-card items-center py-12 text-center">
+            <div className="now-lede">No one here yet</div>
+            <p className="now-muted max-w-md text-sm">
               No one is in your department yet. Ask an administrator to add people
               to it on the Organisation page.
             </p>
-          </Card>
+          </div>
         )}
 
         {members.length > 0 && (
           <>
-            {/* Summary tiles */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Tile label="Team members" value={String(members.length)} icon={<Users className="h-4 w-4" />} />
-              <Tile label="Clocked in now" value={String(clockedIn)} icon={<Clock className="h-4 w-4" />} accent="emerald" />
-              <Tile
-                label="Pending leave"
-                value={String(members.reduce((n, m) => n + m.pendingLeaveCount, 0))}
-                icon={<CalendarClock className="h-4 w-4" />}
-                accent="amber"
-              />
-              <Tile
-                label="Missing clock-outs"
-                value={String(members.reduce((n, m) => n + m.missingClockOuts, 0))}
-                icon={<Clock className="h-4 w-4" />}
-                accent="amber"
-              />
+            {/* Summary */}
+            <div className="now-stat-strip">
+              <div>
+                <div className="now-stat-label flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5" aria-hidden="true" /> Team members
+                </div>
+                <div className="now-stat-value">{members.length}</div>
+              </div>
+              <div>
+                <div className="now-stat-label flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" aria-hidden="true" /> Clocked in now
+                </div>
+                <div className={`now-stat-value${clockedIn > 0 ? " nb-ok" : ""}`}>{clockedIn}</div>
+              </div>
+              <div>
+                <div className="now-stat-label flex items-center gap-1.5">
+                  <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" /> Pending leave
+                </div>
+                <div className={`now-stat-value${pendingLeave > 0 ? " now-warn" : ""}`}>{pendingLeave}</div>
+              </div>
+              <div>
+                <div className="now-stat-label flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" aria-hidden="true" /> Missing clock-outs
+                </div>
+                <div className={`now-stat-value${missingClockOuts > 0 ? " now-warn" : ""}`}>{missingClockOuts}</div>
+              </div>
             </div>
 
-            <Card className="overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+            <section className="now-card" aria-label="Team members">
+              <div className="now-card-head">
+                <h2 className="now-h2">Team</h2>
+                <span className="now-row-sub">{periodLabel}</span>
+              </div>
+              <div className="nb-table-wrap">
+                <table className="nb-table">
                   <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="px-4 py-3 font-medium">Member</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
-                      <th className="px-4 py-3 font-medium text-right">Present</th>
-                      <th className="px-4 py-3 font-medium text-right">Hours</th>
-                      <th className="px-4 py-3 font-medium text-right">Overtime</th>
-                      <th className="px-4 py-3 font-medium text-right">Leave</th>
+                    <tr>
+                      <th>Member</th>
+                      <th>Status</th>
+                      <th className="num">Present</th>
+                      <th className="num">Hours</th>
+                      <th className="num">Overtime</th>
+                      <th className="num">Leave</th>
                     </tr>
                   </thead>
                   <tbody>
                     {members.map(m => (
-                      <tr key={m.id} className="border-b last:border-0 hover:bg-muted/40">
-                        <td className="px-4 py-3">
-                          <div className="font-medium flex items-center gap-2">
+                      <tr key={m.id}>
+                        <td>
+                          <div className="flex items-center gap-2 font-semibold">
                             {m.name}
-                            {m.isHead && <Badge variant="outline" className="text-[10px]">Head</Badge>}
+                            {m.isHead && <span className="now-pill ink nb-plain" style={{ fontSize: 11 }}>Head</span>}
                           </div>
-                          <div className="text-xs text-muted-foreground">
+                          <div className="now-row-sub">
                             {m.position || "—"}
                           </div>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="whitespace-nowrap">
                           {m.clockedInSince ? (
-                            <span className="inline-flex items-center gap-1.5 text-emerald-500">
-                              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                            <span className="nb-ok inline-flex items-center gap-1.5 font-semibold">
+                              <span className="nb-dot ok" aria-hidden="true" />
                               In · {formatDistanceToNow(new Date(m.clockedInSince))}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                              <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+                            <span className="now-muted inline-flex items-center gap-1.5">
+                              <span className="nb-dot" aria-hidden="true" />
                               Out
                             </span>
                           )}
                           {m.missingClockOuts > 0 && (
-                            <div className="text-[11px] text-amber-500 mt-0.5">
+                            <div className="now-warn mt-0.5 text-xs font-medium">
                               {m.missingClockOuts} forgot to clock out
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right">{m.presentDays}</td>
-                        <td className="px-4 py-3 text-right">{m.totalHours.toFixed(1)}</td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="num">{m.presentDays}</td>
+                        <td className="num">{m.totalHours.toFixed(1)}</td>
+                        <td className="num">
                           {m.overtimeHours > 0
-                            ? <span className="text-violet-400">{m.overtimeHours.toFixed(1)}</span>
-                            : <span className="text-muted-foreground">0</span>}
+                            ? <span className="nb-info font-semibold">{m.overtimeHours.toFixed(1)}</span>
+                            : <span className="now-muted">0</span>}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="num">
                           {m.pendingLeaveCount > 0 ? (
-                            <Link href="/admin/leaves">
-                              <Badge className="cursor-pointer bg-amber-500/20 text-amber-500 border-amber-500/40">
-                                {m.pendingLeaveCount} pending
-                              </Badge>
+                            <Link href="/admin/leaves" className="now-pill risk nb-plain cursor-pointer" style={{ fontFamily: "var(--font-body)" }}>
+                              {m.pendingLeaveCount} pending
                             </Link>
                           ) : (
-                            <span className="text-muted-foreground">—</span>
+                            <span className="now-muted">—</span>
                           )}
                         </td>
                       </tr>
@@ -171,11 +192,11 @@ export default function TeamOverview() {
                   </tbody>
                 </table>
               </div>
-            </Card>
+            </section>
 
             <p className="text-xs text-muted-foreground">
               Leave requests from your team come to the{" "}
-              <Link href="/admin/leaves"><span className="underline cursor-pointer">Leaves</span></Link>{" "}
+              <Link href="/admin/leaves" className="now-link" style={{ fontSize: 12 }}>Leaves</Link>{" "}
               page for you to approve.
             </p>
           </>
@@ -185,21 +206,12 @@ export default function TeamOverview() {
   );
 }
 
-function Tile({
-  label, value, icon, accent,
-}: {
-  label: string; value: string; icon: React.ReactNode; accent?: "emerald" | "amber";
-}) {
-  const tone =
-    accent === "emerald" ? "text-emerald-500"
-    : accent === "amber" ? "text-amber-500"
-    : "text-foreground";
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        {icon} {label}
-      </div>
-      <div className={`text-2xl font-semibold mt-1 ${tone}`}>{value}</div>
-    </Card>
-  );
+/**
+ * Heads see this page in the employee shell, which has no top bar, so the
+ * usual Ask Wingman and bell tools stay in the header there. Read inside the
+ * shell, because that is where the Admin Panel provides its context.
+ */
+function ShellTools() {
+  const inAdmin = useContext(AdminShellContext);
+  return inAdmin ? null : <NowHeaderTools />;
 }

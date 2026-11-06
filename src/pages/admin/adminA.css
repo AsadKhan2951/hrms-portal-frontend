@@ -1,0 +1,58 @@
+/*
+ * Admin pages in the Now design: Overview (/admin), Employees, Leave approval
+ * and Payslips. Only what the shared .now-* classes in index.css do not cover.
+ * Every colour comes from the theme tokens, so light and dark both work.
+ */
+
+/* Plain data table inside a .now-card; scrolls sideways on its own on phones. */
+.aa-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px; }
+.aa-table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.aa-table th {
+  text-align: left; padding: 0 14px 10px; white-space: nowrap;
+  color: var(--muted-foreground); font-size: 13px; font-weight: 600;
+}
+.aa-table td { padding: 12px 14px; border-top: 1px solid var(--secondary); vertical-align: middle; }
+.aa-table th:first-child, .aa-table td:first-child { padding-left: 0; }
+.aa-table th:last-child, .aa-table td:last-child { padding-right: 0; }
+.aa-table tbody tr:hover td { background: color-mix(in srgb, var(--background) 60%, transparent); }
+
+/* Initials avatar sizes on top of .now-avatar. */
+.now-avatar.aa-sm { flex: 0 0 32px; width: 32px; height: 32px; font-size: 12.5px; }
+.now-avatar.aa-lg { flex: 0 0 48px; width: 48px; height: 48px; font-size: 17px; }
+
+/* Status pills that need a good / bad reading beyond .now-pill's set. */
+.now-pill.aa-ok { background: color-mix(in srgb, #16a34a 18%, var(--card)); color: var(--foreground); }
+.now-pill.aa-bad { background: color-mix(in srgb, #dc2626 16%, var(--card)); color: var(--foreground); }
+.now-pill.aa-plain { text-transform: none; }
+
+/* Small coloured dot: chart legends and live status. */
+.aa-dot { display: inline-block; flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; }
+
+/* A sub-section inside a dialog (dialogs sit on --background). */
+.aa-sub { background: var(--card); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.aa-sub-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.aa-sub-title { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 700; font-size: 16px; }
+.aa-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.aa-field > label, .aa-field > [data-slot="label"] { font-size: 13.5px; font-weight: 600; }
+
+/* Label / value pairs (leave request facts, dialog summaries). */
+.aa-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px 20px; }
+.aa-facts dt { font-size: 13px; color: var(--muted-foreground); }
+.aa-facts dd { font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; }
+.aa-kv { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 14px; }
+.aa-kv > span:first-child { color: var(--muted-foreground); }
+.aa-kv > span:last-child { font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+
+/* The charts take the muted text colour for axes and grid. */
+.aa-chart { color: var(--muted-foreground); width: 100%; min-width: 0; }
+.aa-chart .recharts-tooltip-wrapper { color: var(--foreground); }
+
+/* List rows inside a .now-card.flush that wrap neatly on a phone. */
+.aa-row-main { display: flex; align-items: flex-start; gap: 12px; min-width: 0; flex: 1 1 240px; }
+.aa-row-side { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 0 1 auto; }
+.aa-clamp { min-width: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+  .aa-row-side { width: 100%; }
+  .aa-row-side .now-btn.grow-sm { flex: 1 1 0; }
+}

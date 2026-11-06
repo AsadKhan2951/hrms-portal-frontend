@@ -26,7 +26,7 @@ export default function Account() {
   const { user, loading, logout } = useAuth();
   const utils = trpc.useUtils();
   const { mode, setMode } = useTheme();
-  const { data: projectStats } = trpc.projects.getStats.useQuery();
+  const { data: projectStats } = trpc.fpb.getMyStats.useQuery();
   const settings = trpc.wingman.getSettings.useQuery();
 
   const [photoOpen, setPhotoOpen] = useState(false);

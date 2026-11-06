@@ -18,7 +18,6 @@ import Wingman from "./pages/Wingman";
 import RequestsReview from "./pages/admin/RequestsReview";
 import Leads from "./pages/admin/Leads";
 import Forms from "./pages/Forms";
-import Projects from "./pages/Projects";
 import Notifications from "./pages/Notifications";
 import Reports from "./pages/Reports";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -26,11 +25,12 @@ import EmployeeManagement from "./pages/admin/EmployeeManagement";
 import LeaveApproval from "./pages/admin/LeaveApproval";
 import FormResponses from "./pages/admin/FormResponses";
 import PayslipManagement from "./pages/admin/PayslipManagement";
-import ProjectAssignment from "./pages/admin/ProjectAssignment";
 import AdvancedReports from "./pages/admin/AdvancedReports";
 import AnnouncementsManagement from "./pages/admin/AnnouncementsManagement";
 import Organisation from "./pages/admin/Organisation";
 import TeamOverview from "./pages/admin/TeamOverview";
+import ProjectsOverview from "./pages/admin/ProjectsOverview";
+import DepartmentBoard from "./pages/DepartmentBoard";
 import Calendar from "./pages/Calendar";
 import ScheduleMeeting from "./pages/ScheduleMeeting";
 import FlowProjectBoard from "./pages/FlowProjectBoard";
@@ -115,9 +115,8 @@ function Router() {
       <Route path="/forms">
         {() => <ProtectedRoute component={Forms} />}
       </Route>
-      <Route path="/projects">
-        {() => <ProtectedRoute component={Projects} />}
-      </Route>
+      {/* The old projects page is gone; its links land on the board. */}
+      <Route path="/projects">{() => <Redirect to="/board" />}</Route>
       <Route path="/reports">
         {() => <ProtectedRoute component={Reports} />}
       </Route>
@@ -144,9 +143,7 @@ function Router() {
       <Route path="/admin/payslips">
         {() => <ProtectedRoute component={PayslipManagement} />}
       </Route>
-      <Route path="/admin/projects">
-        {() => <ProtectedRoute component={ProjectAssignment} />}
-      </Route>
+      <Route path="/admin/projects">{() => <Redirect to="/admin/work" />}</Route>
       <Route path="/admin/reports">
         {() => <ProtectedRoute component={AdvancedReports} />}
       </Route>
@@ -158,6 +155,12 @@ function Router() {
       </Route>
       <Route path="/admin/requests">
         {() => <ProtectedRoute component={RequestsReview} />}
+      </Route>
+      <Route path="/department-board">
+        {() => <ProtectedRoute component={DepartmentBoard} />}
+      </Route>
+      <Route path="/admin/work">
+        {() => <ProtectedRoute component={ProjectsOverview} />}
       </Route>
       <Route path="/admin/team">
         {() => <ProtectedRoute component={TeamOverview} />}

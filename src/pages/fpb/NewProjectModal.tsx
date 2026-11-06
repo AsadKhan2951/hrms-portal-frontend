@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Avatar, COLUMN_COLORS, PROJECT_TYPES, type Priority, type ProjectType,
+  Avatar, COLUMN_COLORS, ScopePicker, type Priority, type ProjectScope,
 } from "@/pages/fpb/shared";
 
 /** What a brand-new project's board looks like unless the admin edits it. */
@@ -38,7 +38,8 @@ export function NewProjectModal({
   const utils = trpc.useUtils();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [projectType, setProjectType] = useState<ProjectType>("dev");
+  const [scopes, setScopes] = useState<ProjectScope[]>([]);
+  const [startDate, setStartDate] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
   const [dueDate, setDueDate] = useState("");
   const [memberIds, setMemberIds] = useState<string[]>([]);
@@ -46,7 +47,7 @@ export function NewProjectModal({
   const [newColumn, setNewColumn] = useState("");
 
   const reset = () => {
-    setTitle(""); setDescription(""); setProjectType("dev"); setPriority("medium");
+    setTitle(""); setDescription(""); setScopes([]); setStartDate(""); setPriority("medium");
     setDueDate(""); setMemberIds([]); setColumns(DEFAULT_WORKFLOW); setNewColumn("");
   };
 
@@ -74,11 +75,20 @@ export function NewProjectModal({
 
   const submit = () => {
     if (!title.trim() || columns.length === 0) return;
+    if (scopes.length === 0) {
+      toast.error("Pick at least one scope");
+      return;
+    }
+    if (startDate && dueDate && startDate > dueDate) {
+      toast.error("The start date is after the due date");
+      return;
+    }
     create.mutate({
       title: title.trim(),
       description: description.trim() || undefined,
-      projectType,
+      scopes,
       priority,
+      startDate: startDate ? new Date(`${startDate}T12:00:00`) : undefined,
       dueDate: dueDate ? new Date(`${dueDate}T12:00:00`) : undefined,
       memberIds: memberIds.length > 0 ? memberIds : undefined,
       columns,
@@ -118,19 +128,30 @@ export function NewProjectModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={`text-xs mb-1.5 block ${tokens.textMuted}`}>Scope * (pick one or more)</label>
+            <ScopePicker value={scopes} onChange={setScopes} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
-              <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Type</label>
-              <Select value={projectType} onValueChange={v => setProjectType(v as ProjectType)}>
-                <SelectTrigger className={tokens.select}><SelectValue /></SelectTrigger>
-                <SelectContent className={tokens.selectContent}>
-                  {PROJECT_TYPES.map(pt => (
-                    <SelectItem key={pt.value} value={pt.value}>
-                      <span className={`flex items-center gap-2 ${pt.color}`}>{pt.icon} {pt.label}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Start date</label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                className={tokens.input}
+              />
+            </div>
+            <div>
+              <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Due date</label>
+              <Input
+                type="date"
+                value={dueDate}
+                min={startDate || undefined}
+                onChange={e => setDueDate(e.target.value)}
+                className={tokens.input}
+              />
             </div>
             <div>
               <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Priority</label>
@@ -143,16 +164,6 @@ export function NewProjectModal({
                 </SelectContent>
               </Select>
             </div>
-          </div>
-
-          <div>
-            <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Due Date</label>
-            <Input
-              type="date"
-              value={dueDate}
-              onChange={e => setDueDate(e.target.value)}
-              className={tokens.input}
-            />
           </div>
 
           {/* Workflow — becomes this project's columns */}
@@ -244,7 +255,7 @@ export function NewProjectModal({
             </Button>
             <Button
               onClick={submit}
-              disabled={!title.trim() || create.isPending}
+              disabled={!title.trim() || scopes.length === 0 || create.isPending}
               className="bg-[#4233e0] hover:bg-[#2a1fb0] text-white"
             >
               {create.isPending

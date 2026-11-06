@@ -1,9 +1,7 @@
 import AdminLayout from "@/components/AdminLayout";
 import { useState, useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { NowPageHeader, Segmented } from "@/components/now/NowPage";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -18,7 +16,6 @@ import {
   Check,
   X,
   Clock,
-  User,
   Loader2,
 } from "lucide-react";
 import { Redirect } from "wouter";
@@ -26,6 +23,13 @@ import { isAnyHead } from "@/lib/roles";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { trpc } from "@/lib/trpc";
+import "./adminA.css";
+
+const initials = (name?: string) => {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  return `${parts[0]?.[0] ?? ""}${parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : ""}`.toUpperCase() || "?";
+};
 
 export default function LeaveApproval() {
   const { user } = useAuth();
@@ -43,13 +47,14 @@ export default function LeaveApproval() {
     },
   });
 
-  if (user && !isAnyHead(user.role)) {
-    return <Redirect to="/dashboard" />;
-  }
-
+  // Kept above the redirect so the hook order never changes between renders.
   const filteredRequests = useMemo(() => {
     return leaveRequests.filter((req: any) => (filter === "all" ? true : req.status === filter));
   }, [leaveRequests, filter]);
+
+  if (user && !isAnyHead(user.role)) {
+    return <Redirect to="/dashboard" />;
+  }
 
   const openActionDialog = (leave: any, action: "approve" | "reject") => {
     setSelectedLeave(leave);
@@ -76,170 +81,168 @@ export default function LeaveApproval() {
   };
 
   const getStatusBadge = (status: string) => {
-    const config: Record<string, { variant: "default" | "secondary" | "destructive", className: string }> = {
-      pending: { variant: "secondary", className: "bg-yellow-500/10 text-yellow-600" },
-      approved: { variant: "default", className: "bg-green-500/10 text-green-600" },
-      rejected: { variant: "destructive", className: "bg-red-500/10 text-red-600" },
+    const tone: Record<string, string> = {
+      pending: "warn-soft",
+      approved: "aa-ok",
+      rejected: "aa-bad",
     };
 
-    const { variant, className } = config[status] || config.pending;
-
-    return (
-      <Badge variant={variant} className={className}>
-        {status}
-      </Badge>
-    );
+    return <span className={`now-pill ${tone[status] || tone.pending}`}>{status}</span>;
   };
 
   const pendingCount = leaveRequests.filter((r: any) => r.status === "pending").length;
+  const approvedCount = leaveRequests.filter((r: any) => r.status === "approved").length;
+  const rejectedCount = leaveRequests.filter((r: any) => r.status === "rejected").length;
 
   return (
     <AdminLayout title="Leave Approval">
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="now-page">
+        <NowPageHeader
+          title="Leave approval"
+          subtitle={
+            <>
+              Review and manage employee leave requests.{" "}
+              {pendingCount > 0 ? `${pendingCount} waiting for you.` : "Nothing waiting."}
+            </>
+          }
+          actions={
+            pendingCount > 0 ? (
+              <div className="now-header-actions">
+                <span className="now-pill risk md">{pendingCount} pending</span>
+              </div>
+            ) : undefined
+          }
+        />
+
+        <div className="now-stat-strip">
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <FileCheck className="h-6 w-6" />
-              Leave Approval
-              {pendingCount > 0 && (
-                <Badge variant="destructive" className="ml-2">
-                  {pendingCount} pending
-                </Badge>
-              )}
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Review and manage employee leave requests
-            </p>
+            <div className="now-stat-label">Pending</div>
+            <div className={`now-stat-value tabular-nums${pendingCount ? " now-warn" : ""}`}>{isLoading ? "--" : pendingCount}</div>
+            <div className="now-stat-label">waiting for a decision</div>
+          </div>
+          <div>
+            <div className="now-stat-label">Approved</div>
+            <div className="now-stat-value tabular-nums">{isLoading ? "--" : approvedCount}</div>
+            <div className="now-stat-label">requests granted</div>
+          </div>
+          <div>
+            <div className="now-stat-label">Rejected</div>
+            <div className="now-stat-value tabular-nums">{isLoading ? "--" : rejectedCount}</div>
+            <div className="now-stat-label">requests declined</div>
+          </div>
+          <div>
+            <div className="now-stat-label">Total</div>
+            <div className="now-stat-value tabular-nums">{isLoading ? "--" : leaveRequests.length}</div>
+            <div className="now-stat-label">leave requests</div>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={filter === "pending" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter("pending")}
-          >
-            Pending ({pendingCount})
-          </Button>
-          <Button
-            variant={filter === "all" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter("all")}
-          >
-            All
-          </Button>
-          <Button
-            variant={filter === "approved" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter("approved")}
-          >
-            Approved
-          </Button>
-          <Button
-            variant={filter === "rejected" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter("rejected")}
-          >
-            Rejected
-          </Button>
-        </div>
+        <Segmented
+          label="Show"
+          tone="ink"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "pending", label: `Pending (${pendingCount})` },
+            { value: "all", label: "All" },
+            { value: "approved", label: "Approved" },
+            { value: "rejected", label: "Rejected" },
+          ]}
+        />
 
-        <div className="grid gap-4">
+        <div className="flex flex-col gap-4">
           {isLoading ? (
-            <Card className="p-12">
-              <div className="flex items-center justify-center text-muted-foreground">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-            </Card>
+            <div className="now-card items-center py-14 text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
+              <span className="sr-only">Loading leave requests</span>
+            </div>
           ) : (
             filteredRequests.map((request: any) => {
               const days = request.startDate && request.endDate
                 ? Math.floor((new Date(request.endDate).getTime() - new Date(request.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
                 : 0;
               return (
-                <Card key={request.id} className="p-6">
-                  <div className="flex flex-col gap-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-primary/10 rounded-lg">
-                          <User className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold">{request.user?.name || "Employee"}</h3>
-                          <p className="text-sm text-muted-foreground">{request.user?.employeeId || "--"}</p>
-                        </div>
+                <section key={request.id} className="now-card" style={{ gap: 18 }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="now-avatar" aria-hidden="true">
+                        {initials(request.user?.name)}
                       </div>
-                      {getStatusBadge(request.status)}
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Leave Type</p>
-                        <p className="font-medium">{request.leaveType}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Duration</p>
-                        <p className="font-medium">{days} days</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Start Date</p>
-                        <p className="font-medium">{request.startDate ? format(new Date(request.startDate), "MMM dd, yyyy") : "--"}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">End Date</p>
-                        <p className="font-medium">{request.endDate ? format(new Date(request.endDate), "MMM dd, yyyy") : "--"}</p>
+                      <div className="aa-clamp">
+                        <div className="now-row-title">{request.user?.name || "Employee"}</div>
+                        <div className="now-row-sub tabular-nums">{request.user?.employeeId || "--"}</div>
                       </div>
                     </div>
-
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Reason</p>
-                      <p className="text-sm">{request.reason}</p>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-4 border-t">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        Applied on {request.createdAt ? format(new Date(request.createdAt), "MMM dd, yyyy 'at' HH:mm") : "--"}
-                      </div>
-
-                      {request.status === "pending" && (
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openActionDialog(request, "reject")}
-                            className="text-red-500 hover:text-red-600"
-                          >
-                            <X className="h-4 w-4 mr-1" />
-                            Reject
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => openActionDialog(request, "approve")}
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            <Check className="h-4 w-4 mr-1" />
-                            Approve
-                          </Button>
-                        </div>
-                      )}
-                    </div>
+                    {getStatusBadge(request.status)}
                   </div>
-                </Card>
+
+                  <dl className="aa-facts">
+                    <div>
+                      <dt>Leave type</dt>
+                      <dd className="capitalize">{request.leaveType}</dd>
+                    </div>
+                    <div>
+                      <dt>Duration</dt>
+                      <dd className="tabular-nums">{days} days</dd>
+                    </div>
+                    <div>
+                      <dt>Start date</dt>
+                      <dd className="tabular-nums">{request.startDate ? format(new Date(request.startDate), "MMM dd, yyyy") : "--"}</dd>
+                    </div>
+                    <div>
+                      <dt>End date</dt>
+                      <dd className="tabular-nums">{request.endDate ? format(new Date(request.endDate), "MMM dd, yyyy") : "--"}</dd>
+                    </div>
+                  </dl>
+
+                  <div>
+                    <div className="now-stat-label">Reason</div>
+                    <p className="now-body-2 mt-0.5" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{request.reason}</p>
+                  </div>
+
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-3 pt-4"
+                    style={{ borderTop: "1px solid var(--secondary)" }}
+                  >
+                    <div className="flex items-center gap-2 now-small now-muted">
+                      <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                      Applied on {request.createdAt ? format(new Date(request.createdAt), "MMM dd, yyyy 'at' HH:mm") : "--"}
+                    </div>
+
+                    {request.status === "pending" && (
+                      <div className="aa-row-side">
+                        <button
+                          type="button"
+                          className="now-btn ground sm grow-sm"
+                          onClick={() => openActionDialog(request, "reject")}
+                        >
+                          <X className="h-4 w-4" aria-hidden="true" />
+                          Reject
+                        </button>
+                        <button
+                          type="button"
+                          className="now-btn ink sm grow-sm"
+                          onClick={() => openActionDialog(request, "approve")}
+                        >
+                          <Check className="h-4 w-4" aria-hidden="true" />
+                          Approve
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </section>
               );
             })
           )}
 
           {!isLoading && filteredRequests.length === 0 && (
-            <Card className="p-12">
-              <div className="text-center text-muted-foreground">
-                <FileCheck className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No leave requests found</p>
-                <p className="text-sm mt-1">
-                  {filter === "pending" ? "All leave requests have been reviewed" : "Try adjusting your filter"}
-                </p>
-              </div>
-            </Card>
+            <div className="now-card items-center py-14 text-center">
+              <FileCheck className="h-10 w-10 text-muted-foreground opacity-60" aria-hidden="true" />
+              <div className="now-lede">No leave requests found</div>
+              <p className="now-muted">
+                {filter === "pending" ? "All leave requests have been reviewed" : "Try adjusting your filter"}
+              </p>
+            </div>
           )}
         </div>
 
@@ -257,37 +260,38 @@ export default function LeaveApproval() {
             </DialogHeader>
 
             {selectedLeave && (
-              <div className="space-y-4 py-4">
-                <div className="p-4 bg-muted rounded-lg space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Employee:</span>
-                    <span className="text-sm">{selectedLeave.user?.name || "Employee"}</span>
+              <div className="space-y-4 py-2">
+                <div className="aa-sub" style={{ gap: 10 }}>
+                  <div className="aa-kv">
+                    <span>Employee</span>
+                    <span>{selectedLeave.user?.name || "Employee"}</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Leave Type:</span>
-                    <span className="text-sm">{selectedLeave.leaveType}</span>
+                  <div className="aa-kv">
+                    <span>Leave type</span>
+                    <span className="capitalize">{selectedLeave.leaveType}</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Duration:</span>
-                    <span className="text-sm">
+                  <div className="aa-kv">
+                    <span>Duration</span>
+                    <span className="tabular-nums">
                       {selectedLeave.startDate && selectedLeave.endDate
                         ? Math.floor((new Date(selectedLeave.endDate).getTime() - new Date(selectedLeave.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
                         : 0} days
                     </span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Dates:</span>
-                    <span className="text-sm">
+                  <div className="aa-kv">
+                    <span>Dates</span>
+                    <span className="tabular-nums">
                       {selectedLeave.startDate ? format(new Date(selectedLeave.startDate), "MMM dd") : "--"} - {selectedLeave.endDate ? format(new Date(selectedLeave.endDate), "MMM dd, yyyy") : "--"}
                     </span>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
+                <div className="aa-field">
+                  <label htmlFor="leave-action-comments">
                     {actionType === "approve" ? "Comments (Optional)" : "Rejection Reason *"}
                   </label>
                   <Textarea
+                    id="leave-action-comments"
                     placeholder={actionType === "approve"
                       ? "Add any comments or notes..."
                       : "Explain why this request is being rejected..."}
@@ -299,17 +303,19 @@ export default function LeaveApproval() {
               </div>
             )}
 
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setActionDialogOpen(false)}>
+            <DialogFooter className="gap-2">
+              <button type="button" className="now-btn ground sm" onClick={() => setActionDialogOpen(false)}>
                 Cancel
-              </Button>
-              <Button
+              </button>
+              <button
+                type="button"
                 onClick={handleAction}
-                className={actionType === "reject" ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"}
+                className={`now-btn sm${actionType === "reject" ? "" : " ink"}`}
+                style={actionType === "reject" ? { background: "var(--destructive)", color: "#fff" } : undefined}
                 disabled={updateLeaveMutation.isPending}
               >
                 {updateLeaveMutation.isPending ? "Saving..." : actionType === "approve" ? "Approve Leave" : "Reject Leave"}
-              </Button>
+              </button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

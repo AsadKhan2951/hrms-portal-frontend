@@ -36,7 +36,7 @@ import { MeetingsCalendar } from "@/pages/fpb/MeetingsCalendar";
 import { PerformanceView } from "@/pages/fpb/PerformanceView";
 import { EmployeePicker } from "@/pages/fpb/EmployeePicker";
 import {
-  PROJECT_TYPES, boardStats, formatDate, getTypeInfo, initialsOf, taskTag,
+  PROJECT_SCOPES, boardStats, formatDate, initialsOf, scopeLabel, taskTag,
 } from "@/pages/fpb/shared";
 
 const SELECTED_KEY = "fpb-selected-project";
@@ -91,12 +91,13 @@ export default function FlowProjectBoard() {
     trpc.fpb.getProjects.useQuery(
       filterType !== "all" || employeeId
         ? {
-            ...(filterType !== "all" ? { projectType: filterType } : {}),
+            ...(filterType !== "all" ? { scope: filterType } : {}),
             ...(employeeId ? { employeeId } : {}),
           }
         : undefined
     );
   const { data: users = [] } = trpc.fpb.getUsers.useQuery();
+  const { data: departments = [] } = trpc.fpb.getDepartments.useQuery();
   // Opening a project is a granted right now, so the button is hidden rather
   // than offered and then refused. The server checks this again.
   const { data: mayCreate = false } = trpc.fpb.canCreateProjects.useQuery();
@@ -356,12 +357,12 @@ export default function FlowProjectBoard() {
                   </div>
                   <Select value={filterType} onValueChange={setFilterType}>
                     <SelectTrigger className={`mt-2 h-11 w-full rounded-xl ${t.select}`}>
-                      <SelectValue placeholder="All types" />
+                      <SelectValue placeholder="All scopes" />
                     </SelectTrigger>
                     <SelectContent className={t.selectContent}>
-                      <SelectItem value="all">All types</SelectItem>
-                      {PROJECT_TYPES.map(pt => (
-                        <SelectItem key={pt.value} value={pt.value}>{pt.short}</SelectItem>
+                      <SelectItem value="all">All scopes</SelectItem>
+                      {PROJECT_SCOPES.map(ps => (
+                        <SelectItem key={ps.value} value={ps.value}>{ps.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -382,7 +383,7 @@ export default function FlowProjectBoard() {
                         <span className="min-w-0">
                           <span className="block truncate font-semibold">{p.title}</span>
                           <span className="now-row-sub">
-                            {getTypeInfo(p.projectType).short} · {p.completedTasks}/{p.taskCount} done
+                            {scopeLabel(p.scopes)} · {p.completedTasks}/{p.taskCount} done
                           </span>
                         </span>
                         {p.id === activeId && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
@@ -510,7 +511,7 @@ export default function FlowProjectBoard() {
               {employee
                 ? "Once they create a project or are added to one, its board shows here."
                 : filterType !== "all"
-                ? "No project of this type. Choose another type in the project picker."
+                ? "No project with this scope. Choose another scope in the project picker."
                 : mayCreate
                   ? "Create your first project and its board appears here."
                   : "You will see a project here once you are added to one."}
@@ -660,6 +661,7 @@ export default function FlowProjectBoard() {
                                             index={index}
                                             users={users as any[]}
                                             labels={labels}
+                                            departments={departments as any[]}
                                             myId={focusId}
                                             onOpen={() => setOpenTaskId(task.id)}
                                             onDelete={() => {

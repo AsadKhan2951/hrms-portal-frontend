@@ -1,9 +1,6 @@
 import AdminLayout from "@/components/AdminLayout";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -30,6 +27,8 @@ import { isOrgWide, isStaff } from "@/lib/roles";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { downloadCsv } from "@/lib/csv";
+import { NowPageHeader } from "@/components/now/NowPage";
+import "./adminB.css";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -57,11 +56,11 @@ const fmtDay = (date: string) =>
   new Date(`${date}T00:00:00`).toLocaleDateString([], { weekday: "short" });
 
 const STATUS_STYLES: Record<string, string> = {
-  present: "text-green-600",
-  absent: "text-red-600",
-  leave: "text-blue-600",
-  off: "text-muted-foreground",
-  upcoming: "text-muted-foreground",
+  present: "nb-ok",
+  absent: "nb-bad",
+  leave: "nb-info",
+  off: "now-muted",
+  upcoming: "now-muted",
 };
 
 const MUSTER_MARK: Record<string, string> = {
@@ -95,10 +94,6 @@ export default function AdvancedReports() {
   });
 
   const { data: employeeStatuses = [] } = trpc.admin.getEmployeeStatusSnapshot.useQuery();
-
-  if (user && !isOrgWide(user.role)) {
-    return <Redirect to="/dashboard" />;
-  }
 
   const rows = report?.rows ?? [];
   const totals = report?.totals;
@@ -172,6 +167,11 @@ export default function AdvancedReports() {
     ];
   }, [totals, rows]);
 
+  // Checked after every hook has run so the hook order never changes.
+  if (user && !isOrgWide(user.role)) {
+    return <Redirect to="/dashboard" />;
+  }
+
   const handleExport = () => {
     if (rows.length === 0) {
       toast.error("Nothing to export for this month");
@@ -222,62 +222,74 @@ export default function AdvancedReports() {
     toast.success("CSV downloaded");
   };
 
+  const emptyState = (title: string, body?: string) => (
+    <div className="now-card nb-soft items-center py-10 text-center">
+      <div className="now-lede">{title}</div>
+      {body && <p className="now-muted max-w-lg text-sm">{body}</p>}
+    </div>
+  );
+
   const renderReportContent = () => {
     if (NOT_IMPLEMENTED[selectedReport]) {
       return (
-        <Card className="p-10 border-dashed">
-          <div className="text-center text-muted-foreground max-w-lg mx-auto">
-            <BarChart3 className="h-10 w-10 mx-auto mb-4 opacity-40" />
-            <p className="font-medium text-foreground mb-2">Not built yet</p>
-            <p className="text-sm">{NOT_IMPLEMENTED[selectedReport]}</p>
-          </div>
-        </Card>
+        <div className="now-card nb-soft items-center py-10 text-center">
+          <BarChart3 className="h-9 w-9 text-muted-foreground opacity-50" aria-hidden="true" />
+          <div className="now-lede">Not built yet</div>
+          <p className="now-muted max-w-lg text-sm">{NOT_IMPLEMENTED[selectedReport]}</p>
+        </div>
       );
     }
 
     if (selectedReport === "realtime-dashboard") {
       return (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="flex flex-col gap-6">
+          <div className="now-stat-grid">
             {[
-              { label: "Currently Working", count: employeeStatuses.filter((e: any) => e.status === "timed_in").length, cls: "green" },
-              { label: "On Break", count: employeeStatuses.filter((e: any) => e.status === "on_break").length, cls: "blue" },
-              { label: "On Leave Today", count: employeeStatuses.filter((e: any) => e.status === "on_leave").length, cls: "red" },
+              { label: "Currently Working", count: employeeStatuses.filter((e: any) => e.status === "timed_in").length, dot: "ok" },
+              { label: "On Break", count: employeeStatuses.filter((e: any) => e.status === "on_break").length, dot: "info" },
+              { label: "On Leave Today", count: employeeStatuses.filter((e: any) => e.status === "on_leave").length, dot: "warn" },
             ].map(card => (
-              <Card key={card.label} className="p-6">
-                <div className={`p-3 bg-${card.cls}-500/10 rounded-lg w-fit mb-2`}>
-                  <Users className={`h-6 w-6 text-${card.cls}-500`} />
+              <div key={card.label}>
+                <div className="now-stat-label flex items-center gap-2">
+                  <span className={`nb-dot ${card.dot}`} aria-hidden="true" />
+                  {card.label}
                 </div>
-                <h3 className="text-2xl font-bold mb-1">{card.count}</h3>
-                <p className="text-sm text-muted-foreground">{card.label}</p>
-              </Card>
+                <div className="now-stat-value">{card.count}</div>
+              </div>
             ))}
           </div>
 
-          <Card className="p-6">
-            <h3 className="font-semibold mb-4">Live Status</h3>
-            <div className="space-y-3">
-              {employeeStatuses.map((emp: any) => (
-                <div key={emp.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className={`h-3 w-3 rounded-full ${emp.status === "timed_in" ? "bg-green-500" : emp.status === "on_break" ? "bg-blue-500" : emp.status === "on_leave" ? "bg-amber-500" : "bg-gray-500"}`} />
-                    <span className="font-medium">{emp.name}</span>
+          <div>
+            <h3 className="now-row-title mb-1">Live Status</h3>
+            {employeeStatuses.length === 0 ? (
+              <div className="now-row now-muted" style={{ borderTop: 0 }}>Nobody to show.</div>
+            ) : (
+              employeeStatuses.map((emp: any, index: number) => (
+                <div key={emp.id} className="now-row tight" style={{ borderTop: index === 0 ? 0 : undefined }}>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span
+                      className={`nb-dot ${emp.status === "timed_in" ? "ok" : emp.status === "on_break" ? "info" : emp.status === "on_leave" ? "warn" : ""}`}
+                      aria-hidden="true"
+                    />
+                    <span className="truncate font-semibold">{emp.name}</span>
                   </div>
-                  <Badge variant="outline">
+                  <span
+                    className={`now-pill ${emp.status === "timed_in" ? "nb-ok-soft" : emp.status === "on_break" ? "nb-info-soft" : emp.status === "on_leave" ? "warn-soft" : ""}`}
+                  >
                     {emp.status === "timed_in" ? "Working" : emp.status === "on_break" ? "On Break" : emp.status === "on_leave" ? "On Leave" : "Offline"}
-                  </Badge>
+                  </span>
                 </div>
-              ))}
-            </div>
-          </Card>
+              ))
+            )}
+          </div>
         </div>
       );
     }
 
     if (isLoading) {
       return (
-        <div className="flex items-center justify-center h-40 text-muted-foreground">
-          <Loader2 className="h-6 w-6 animate-spin mr-2" />
+        <div className="flex h-40 items-center justify-center gap-2 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
           Loading {periodLabel}...
         </div>
       );
@@ -285,83 +297,72 @@ export default function AdvancedReports() {
 
     if (error) {
       return (
-        <Card className="p-8 border-destructive/40">
-          <p className="text-center text-destructive">{error.message}</p>
-        </Card>
+        <div className="now-card nb-soft py-8 text-center">
+          <p className="nb-bad">{error.message}</p>
+        </div>
       );
     }
 
     if (rows.length === 0) {
-      return (
-        <Card className="p-10">
-          <p className="text-center text-muted-foreground">
-            No employees found for {periodLabel}
-          </p>
-        </Card>
-      );
+      return emptyState("Nothing to show", `No employees found for ${periodLabel}`);
     }
 
     switch (selectedReport) {
       case "employee-detail": {
         if (!singleEmployee) {
-          return (
-            <Card className="p-10 border-dashed">
-              <p className="text-center text-muted-foreground">
-                Pick a single employee above to see their day-by-day month.
-              </p>
-            </Card>
+          return emptyState(
+            "Pick one employee",
+            "Pick a single employee above to see their day-by-day month."
           );
         }
         return (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="flex flex-col gap-6">
+            <div className="now-stat-grid">
               {[
-                { label: "Present", value: singleEmployee.presentDays, cls: "text-green-600" },
-                { label: "Absent", value: singleEmployee.absentDays, cls: "text-red-600" },
-                { label: "Leave", value: singleEmployee.leaveDays, cls: "text-blue-600" },
+                { label: "Present", value: singleEmployee.presentDays, cls: "nb-ok" },
+                { label: "Absent", value: singleEmployee.absentDays, cls: "nb-bad" },
+                { label: "Leave", value: singleEmployee.leaveDays, cls: "nb-info" },
                 { label: "Total Hours", value: `${singleEmployee.totalHours}h`, cls: "" },
               ].map(s => (
-                <Card key={s.label} className="p-4">
-                  <p className="text-xs text-muted-foreground">{s.label}</p>
-                  <p className={`text-2xl font-bold ${s.cls}`}>{s.value}</p>
-                </Card>
+                <div key={s.label}>
+                  <div className="now-stat-label">{s.label}</div>
+                  <div className={`now-stat-value ${s.cls}`}>{s.value}</div>
+                </div>
               ))}
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="nb-table-wrap">
+              <table className="nb-table">
                 <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-3 font-semibold">Date</th>
-                    <th className="text-left p-3 font-semibold">Day</th>
-                    <th className="text-left p-3 font-semibold">Status</th>
-                    <th className="text-right p-3 font-semibold">Time In</th>
-                    <th className="text-right p-3 font-semibold">Time Out</th>
-                    <th className="text-right p-3 font-semibold">Hours</th>
+                  <tr>
+                    <th>Date</th>
+                    <th>Day</th>
+                    <th>Status</th>
+                    <th className="num">Time In</th>
+                    <th className="num">Time Out</th>
+                    <th className="num">Hours</th>
                   </tr>
                 </thead>
                 <tbody>
                   {singleEmployee.days.map((d: any) => (
-                    <tr key={d.date} className={`border-b hover:bg-muted/50 ${d.isWorkingDay ? "" : "bg-muted/20"}`}>
-                      <td className="p-3">{d.date}</td>
-                      <td className="p-3 text-muted-foreground">{fmtDay(d.date)}</td>
-                      <td className={`p-3 capitalize font-medium ${STATUS_STYLES[d.status]}`}>
+                    <tr key={d.date} className={d.isWorkingDay ? "" : "off"}>
+                      <td className="tabular-nums whitespace-nowrap">{d.date}</td>
+                      <td className="now-muted">{fmtDay(d.date)}</td>
+                      <td className={`font-semibold capitalize ${STATUS_STYLES[d.status]}`}>
                         {d.status === "off" ? "Weekend" : d.status}
                         {d.missingClockOut && (
-                          <span className="ml-2 text-xs text-amber-600">no clock-out</span>
+                          <span className="ml-2 text-xs font-medium text-[var(--now-warn)] normal-case">no clock-out</span>
                         )}
                       </td>
-                      <td className="p-3 text-right">{fmtTime(d.timeIn)}</td>
-                      <td className="p-3 text-right">
+                      <td className="num">{fmtTime(d.timeIn)}</td>
+                      <td className="num">
                         {d.missingClockOut && !d.timeOut ? (
-                          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-600">
-                            Missed clock-out
-                          </span>
+                          <span className="now-pill risk nb-plain">Missed clock-out</span>
                         ) : (
                           fmtTime(d.timeOut)
                         )}
                       </td>
-                      <td className="p-3 text-right font-medium">{d.hours || "--"}</td>
+                      <td className="num font-semibold">{d.hours || "--"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -374,20 +375,20 @@ export default function AdvancedReports() {
       case "muster-roll": {
         const days = rows[0].days;
         return (
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-              <span><b className="text-green-600">P</b> Present</span>
-              <span><b className="text-red-600">A</b> Absent</span>
-              <span><b className="text-blue-600">L</b> Leave</span>
-              <span><b>–</b> Weekend</span>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2">
+              <span className="now-pill nb-ok-soft nb-plain">P · Present</span>
+              <span className="now-pill nb-bad-soft nb-plain">A · Absent</span>
+              <span className="now-pill nb-info-soft nb-plain">L · Leave</span>
+              <span className="now-pill nb-plain">– · Weekend</span>
             </div>
-            <div className="overflow-x-auto">
-              <table className="text-xs border-collapse">
+            <div className="nb-table-wrap">
+              <table className="nb-muster">
                 <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-2 font-semibold sticky left-0 bg-background min-w-[140px]">Employee</th>
+                  <tr>
+                    <th className="name">Employee</th>
                     {days.map((d: any) => (
-                      <th key={d.date} className={`p-1 font-semibold w-7 ${d.isWorkingDay ? "" : "text-muted-foreground"}`}>
+                      <th key={d.date} className={d.isWorkingDay ? "" : "opacity-60"}>
                         {new Date(`${d.date}T00:00:00`).getDate()}
                       </th>
                     ))}
@@ -395,10 +396,10 @@ export default function AdvancedReports() {
                 </thead>
                 <tbody>
                   {rows.map((r: any) => (
-                    <tr key={r.userId} className="border-b hover:bg-muted/50">
-                      <td className="p-2 font-medium sticky left-0 bg-background whitespace-nowrap">{r.name}</td>
+                    <tr key={r.userId}>
+                      <td className="name">{r.name}</td>
                       {r.days.map((d: any) => (
-                        <td key={d.date} className={`p-1 text-center font-semibold ${STATUS_STYLES[d.status]}`}>
+                        <td key={d.date} className={STATUS_STYLES[d.status]}>
                           {MUSTER_MARK[d.status] ?? ""}
                         </td>
                       ))}
@@ -418,34 +419,30 @@ export default function AdvancedReports() {
             .map((d: any) => ({ employee: r.name, ...d }))
         );
         if (exceptions.length === 0) {
-          return (
-            <Card className="p-10">
-              <p className="text-center text-muted-foreground">
-                No exceptions in {periodLabel}
-              </p>
-            </Card>
-          );
+          return emptyState("All clear", `No exceptions in ${periodLabel}`);
         }
         return (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="nb-table-wrap">
+            <table className="nb-table">
               <thead>
-                <tr className="border-b">
-                  <th className="text-left p-3 font-semibold">Employee</th>
-                  <th className="text-left p-3 font-semibold">Date</th>
-                  <th className="text-left p-3 font-semibold">Exception</th>
+                <tr>
+                  <th>Employee</th>
+                  <th>Date</th>
+                  <th>Exception</th>
                 </tr>
               </thead>
               <tbody>
                 {exceptions.map((e: any, i: number) => (
-                  <tr key={`${e.employee}-${e.date}-${i}`} className="border-b hover:bg-muted/50">
-                    <td className="p-3 font-medium">{e.employee}</td>
-                    <td className="p-3">{e.date} ({fmtDay(e.date)})</td>
-                    <td className="p-3">
+                  <tr key={`${e.employee}-${e.date}-${i}`}>
+                    <td className="font-semibold">{e.employee}</td>
+                    <td className="whitespace-nowrap">
+                      <span className="tabular-nums">{e.date}</span> <span className="now-muted">({fmtDay(e.date)})</span>
+                    </td>
+                    <td>
                       {e.missingClockOut ? (
-                        <span className="text-amber-600">Missing clock-out</span>
+                        <span className="now-pill risk nb-plain">Missing clock-out</span>
                       ) : (
-                        <span className="text-red-600">Absent on a working day</span>
+                        <span className="now-pill nb-bad-soft nb-plain">Absent on a working day</span>
                       )}
                     </td>
                   </tr>
@@ -458,23 +455,23 @@ export default function AdvancedReports() {
 
       case "ot-analysis":
         return (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="nb-table-wrap">
+            <table className="nb-table">
               <thead>
-                <tr className="border-b">
-                  <th className="text-left p-3 font-semibold">Employee</th>
-                  <th className="text-right p-3 font-semibold">Days Worked</th>
-                  <th className="text-right p-3 font-semibold">Total Hours</th>
-                  <th className="text-right p-3 font-semibold">Overtime (beyond 8h/day)</th>
+                <tr>
+                  <th>Employee</th>
+                  <th className="num">Days Worked</th>
+                  <th className="num">Total Hours</th>
+                  <th className="num">Overtime (beyond 8h/day)</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r: any) => (
-                  <tr key={r.userId} className="border-b hover:bg-muted/50">
-                    <td className="p-3 font-medium">{r.name}</td>
-                    <td className="p-3 text-right">{r.presentDays}</td>
-                    <td className="p-3 text-right">{r.totalHours}</td>
-                    <td className="p-3 text-right font-semibold">{r.overtimeHours}</td>
+                  <tr key={r.userId}>
+                    <td className="font-semibold">{r.name}</td>
+                    <td className="num">{r.presentDays}</td>
+                    <td className="num">{r.totalHours}</td>
+                    <td className="num font-bold">{r.overtimeHours}</td>
                   </tr>
                 ))}
               </tbody>
@@ -484,25 +481,25 @@ export default function AdvancedReports() {
 
       case "productivity":
         return (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="nb-table-wrap">
+            <table className="nb-table">
               <thead>
-                <tr className="border-b">
-                  <th className="text-left p-3 font-semibold">Employee</th>
-                  <th className="text-right p-3 font-semibold">Days Worked</th>
-                  <th className="text-right p-3 font-semibold">Total Hours</th>
-                  <th className="text-right p-3 font-semibold">Avg Hours/Day</th>
-                  <th className="text-right p-3 font-semibold">Short Days (&lt;6.5h)</th>
+                <tr>
+                  <th>Employee</th>
+                  <th className="num">Days Worked</th>
+                  <th className="num">Total Hours</th>
+                  <th className="num">Avg Hours/Day</th>
+                  <th className="num">Short Days (&lt;6.5h)</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r: any) => (
-                  <tr key={r.userId} className="border-b hover:bg-muted/50">
-                    <td className="p-3 font-medium">{r.name}</td>
-                    <td className="p-3 text-right">{r.presentDays}</td>
-                    <td className="p-3 text-right">{r.totalHours}</td>
-                    <td className="p-3 text-right font-semibold">{r.averageHours}</td>
-                    <td className="p-3 text-right text-amber-600">{r.shortDays}</td>
+                  <tr key={r.userId}>
+                    <td className="font-semibold">{r.name}</td>
+                    <td className="num">{r.presentDays}</td>
+                    <td className="num">{r.totalHours}</td>
+                    <td className="num font-bold">{r.averageHours}</td>
+                    <td className={`num ${r.shortDays > 0 ? "now-warn" : ""}`}>{r.shortDays}</td>
                   </tr>
                 ))}
               </tbody>
@@ -512,22 +509,28 @@ export default function AdvancedReports() {
 
       case "key-metrics":
         return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="now-project-grid">
             {keyMetrics.map(metric => (
-              <Card key={metric.label} className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold">{metric.label}</h3>
+              <div key={metric.label} className="now-tile">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="now-row-title">{metric.label}</span>
                   {metric.good ? (
-                    <TrendingUp className="h-5 w-5 text-green-500" />
+                    <span className="now-pill nb-ok-soft nb-plain">
+                      <TrendingUp className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
+                      Good
+                    </span>
                   ) : (
-                    <TrendingDown className="h-5 w-5 text-red-500" />
+                    <span className="now-pill risk nb-plain">
+                      <TrendingDown className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
+                      Watch
+                    </span>
                   )}
                 </div>
-                <p className="text-3xl font-bold">{metric.value}</p>
-                <p className="text-sm text-muted-foreground mt-2">
+                <div className="now-big-num">{metric.value}</div>
+                <p className="now-row-sub">
                   Across {rows.length} employee{rows.length === 1 ? "" : "s"} in {periodLabel}
                 </p>
-              </Card>
+              </div>
             ))}
           </div>
         );
@@ -535,47 +538,45 @@ export default function AdvancedReports() {
       case "attendance-summary":
       default:
         return (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="nb-table-wrap">
+            <table className="nb-table">
               <thead>
-                <tr className="border-b">
-                  <th className="text-left p-3 font-semibold">Employee</th>
-                  <th className="text-right p-3 font-semibold">Working Days</th>
-                  <th className="text-right p-3 font-semibold">Present</th>
-                  <th className="text-right p-3 font-semibold">Absent</th>
-                  <th className="text-right p-3 font-semibold">Leave</th>
-                  <th className="text-right p-3 font-semibold">Total Hours</th>
-                  <th className="text-right p-3 font-semibold">Payable Days</th>
+                <tr>
+                  <th>Employee</th>
+                  <th className="num">Working Days</th>
+                  <th className="num">Present</th>
+                  <th className="num">Absent</th>
+                  <th className="num">Leave</th>
+                  <th className="num">Total Hours</th>
+                  <th className="num">Payable Days</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r: any) => (
-                  <tr key={r.userId} className="border-b hover:bg-muted/50">
-                    <td className="p-3 font-medium">
-                      {r.name}
-                      {r.employeeId && (
-                        <span className="text-xs text-muted-foreground ml-2">{r.employeeId}</span>
-                      )}
+                  <tr key={r.userId}>
+                    <td>
+                      <div className="font-semibold">{r.name}</div>
+                      {r.employeeId && <div className="now-row-sub">{r.employeeId}</div>}
                     </td>
-                    <td className="p-3 text-right">{r.workingDays}</td>
-                    <td className="p-3 text-right text-green-600">{r.presentDays}</td>
-                    <td className="p-3 text-right text-red-600">{r.absentDays}</td>
-                    <td className="p-3 text-right text-blue-600">{r.leaveDays}</td>
-                    <td className="p-3 text-right">{r.totalHours}</td>
-                    <td className="p-3 text-right font-semibold">{r.presentDays + r.leaveDays}</td>
+                    <td className="num">{r.workingDays}</td>
+                    <td className="num nb-ok">{r.presentDays}</td>
+                    <td className="num nb-bad">{r.absentDays}</td>
+                    <td className="num nb-info">{r.leaveDays}</td>
+                    <td className="num">{r.totalHours}</td>
+                    <td className="num font-bold">{r.presentDays + r.leaveDays}</td>
                   </tr>
                 ))}
               </tbody>
               {totals && (
                 <tfoot>
-                  <tr className="border-t-2 font-semibold">
-                    <td className="p-3">Total</td>
-                    <td className="p-3" />
-                    <td className="p-3 text-right text-green-600">{totals.presentDays}</td>
-                    <td className="p-3 text-right text-red-600">{totals.absentDays}</td>
-                    <td className="p-3 text-right text-blue-600">{totals.leaveDays}</td>
-                    <td className="p-3 text-right">{totals.totalHours}</td>
-                    <td className="p-3 text-right">{totals.presentDays + totals.leaveDays}</td>
+                  <tr>
+                    <td>Total</td>
+                    <td />
+                    <td className="num nb-ok">{totals.presentDays}</td>
+                    <td className="num nb-bad">{totals.absentDays}</td>
+                    <td className="num nb-info">{totals.leaveDays}</td>
+                    <td className="num">{totals.totalHours}</td>
+                    <td className="num">{totals.presentDays + totals.leaveDays}</td>
                   </tr>
                 </tfoot>
               )}
@@ -590,13 +591,18 @@ export default function AdvancedReports() {
 
   return (
     <AdminLayout title="Advanced Reports">
-      <div className="space-y-6">
-        <Card className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Report Type</label>
+      <div className="now-page">
+        <NowPageHeader
+          title="Advanced reports"
+          subtitle="Attendance, payroll and productivity reports by month"
+        />
+
+        <section className="now-card" aria-label="Report filters">
+          <div className="nb-filters">
+            <div className="wide">
+              <label className="nb-label">Report Type</label>
               <Select value={selectedReport} onValueChange={setSelectedReport}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {reportCategories.map(category => (
                     <div key={category.title}>
@@ -612,10 +618,10 @@ export default function AdvancedReports() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Employee</label>
+            <div>
+              <label className="nb-label">Employee</label>
               <Select value={employeeId} onValueChange={setEmployeeId}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ALL_EMPLOYEES}>All employees</SelectItem>
                   {employees.map((emp: any) => (
@@ -628,10 +634,10 @@ export default function AdvancedReports() {
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Month</label>
+              <div className="min-w-0">
+                <label className="nb-label">Month</label>
                 <Select value={month} onValueChange={setMonth}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {MONTHS.map((m, i) => (
                       <SelectItem key={m} value={String(i + 1)}>{m}</SelectItem>
@@ -639,10 +645,10 @@ export default function AdvancedReports() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Year</label>
+              <div className="min-w-0">
+                <label className="nb-label">Year</label>
                 <Select value={year} onValueChange={setYear}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
                   </SelectContent>
@@ -650,50 +656,51 @@ export default function AdvancedReports() {
               </div>
             </div>
           </div>
-        </Card>
+        </section>
 
-        <Card className="p-6">
-          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
-            <div>
-              <h2 className="text-lg font-semibold mb-1">{reportName}</h2>
-              <p className="text-sm text-muted-foreground">
+        <section className="now-card" aria-label={reportName}>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h2 className="now-h2">{reportName}</h2>
+              <p className="now-row-sub mt-1">
                 {periodLabel}
                 {employeeId !== ALL_EMPLOYEES && singleEmployee ? ` • ${singleEmployee.name}` : ""}
                 {report?.period?.workingDays ? ` • ${report.period.workingDays} working days` : ""}
               </p>
             </div>
             {exportable && (
-              <Button variant="outline" onClick={handleExport}>
-                <Download className="h-4 w-4 mr-2" />
+              <button type="button" className="now-btn sm ground" onClick={handleExport}>
+                <Download className="h-4 w-4" aria-hidden="true" />
                 Export CSV
-              </Button>
+              </button>
             )}
           </div>
 
           {renderReportContent()}
-        </Card>
+        </section>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="now-project-grid">
           {reportCategories.map(category => (
-            <Card key={category.title} className="p-6">
-              <h3 className="font-semibold mb-4">{category.title}</h3>
-              <div className="space-y-2">
+            <section key={category.title} className="now-card" aria-label={category.title}>
+              <h3 className="now-eyebrow">{category.title}</h3>
+              <div className="nb-report-list">
                 {category.reports.map(r => (
-                  <Button
+                  <button
                     key={r.id}
-                    variant={selectedReport === r.id ? "default" : "ghost"}
-                    className="w-full justify-start text-sm h-auto py-2"
+                    type="button"
+                    className="nb-report-btn"
+                    aria-pressed={selectedReport === r.id}
                     onClick={() => setSelectedReport(r.id)}
                   >
-                    <r.icon className="h-4 w-4 mr-2 shrink-0" />
-                    <span className="text-left line-clamp-2">{r.name}</span>
+                    <r.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span className="label line-clamp-2">{r.name}</span>
                     {NOT_IMPLEMENTED[r.id] && (
-                      <Badge variant="outline" className="ml-auto text-[10px]">soon</Badge>
+                      <span className="now-pill nb-plain" style={{ fontSize: 11 }}>soon</span>
                     )}
-                  </Button>
+                  </button>
                 ))}
               </div>
-            </Card>
+            </section>
           ))}
         </div>
       </div>

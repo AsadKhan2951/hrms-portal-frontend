@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { NowPageHeader } from "@/components/now/NowPage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Clock,
@@ -11,13 +9,8 @@ import {
   Award,
   Activity,
   Target,
-  Briefcase,
-  ListTodo,
-  Users,
   FileCheck,
-  MessageSquareText,
   AlertCircle,
-  CheckCircle2,
   RefreshCcw,
   MapPin,
   Wifi,
@@ -30,6 +23,19 @@ import { format, formatDistanceToNow } from "date-fns";
 import { Redirect } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { isOrgWide } from "@/lib/roles";
+import "./admin/adminA.css";
+
+/* Chart colours: the Now indigo plus a done-green and a waiting-amber that read on both themes. */
+const CHART_INDIGO = "#4233e0";
+const CHART_DONE = "#16a34a";
+const CHART_WAITING = "#f59e0b";
+const chartTooltipStyle = {
+  background: "var(--card)",
+  border: "1px solid var(--border)",
+  borderRadius: 12,
+  color: "var(--foreground)",
+  fontSize: 13,
+};
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -43,10 +49,58 @@ export default function AdminDashboard() {
   const { data: employeeStatuses = [] } = trpc.admin.getEmployeeStatusSnapshot.useQuery(undefined, q);
   const { data: leaveRequests = [] } = trpc.admin.getLeaveRequests.useQuery(undefined, q);
   const { data: formSubmissions = [] } = trpc.admin.getFormSubmissions.useQuery(undefined, q);
-  const { data: projects = [] } = trpc.admin.getProjectsOverview.useQuery(undefined, q);
-  const { data: ongoingTasks = [] } = trpc.admin.getOngoingTasks.useQuery(undefined, q);
+  // Projects, tasks and performance come from the board.
+  const thisMonth = { month: new Date().getMonth() + 1, year: new Date().getFullYear() };
+  const { data: boardProjects = [] } = trpc.fpb.getProjects.useQuery(undefined, q);
+  const { data: boardUsers = [] } = trpc.fpb.getUsers.useQuery(undefined, q);
+  const { data: boardOngoing = [] } = trpc.fpb.getOngoingTasks.useQuery(undefined, q);
   const { data: avgHoursData = [] } = trpc.admin.getAverageHours.useQuery({ days: 5 }, q);
-  const { data: resourcePerformance = [] } = trpc.admin.getResourcePerformance.useQuery(undefined, q);
+  const { data: performance } = trpc.fpb.getPerformance.useQuery(thisMonth, q);
+  const { data: departmentKpis = [] } = trpc.fpb.getDepartmentKpis.useQuery(thisMonth, q);
+  const userName = useMemo(
+    () => new Map((boardUsers as any[]).map(u => [String(u.id), u.name || u.employeeId || "Employee"])),
+    [boardUsers]
+  );
+  const projects = useMemo(
+    () =>
+      (boardProjects as any[]).map(p => ({
+        ...p,
+        name: p.title,
+        tasks: p.taskCount ?? 0,
+        assignees: ((p.memberIds ?? []) as string[]).map(id => userName.get(String(id))).filter(Boolean),
+      })),
+    [boardProjects, userName]
+  );
+  const ongoingTasks = useMemo(
+    () =>
+      (boardOngoing as any[]).map(t => ({
+        ...t,
+        priority: String(t.status ?? "").replace(/_/g, " "),
+        assignees: ((t.assignees ?? []) as string[]).map(name => ({ name })),
+        project: { name: t.projectTitle },
+      })),
+    [boardOngoing]
+  );
+  // This month's top people on the board: done vs still open, and their projects.
+  const resourcePerformance = useMemo(
+    () =>
+      (((performance as any)?.departments ?? []) as any[])
+        .flatMap(d => d.employees as any[])
+        .filter(e => e.completed > 0 || e.open > 0)
+        .sort((a, b) => b.completed - a.completed || b.open - a.open)
+        .slice(0, 10)
+        .map(e => ({
+          name: String(e.name).split(" ")[0],
+          tasksCompleted: e.completed,
+          tasksPending: e.open,
+          activeProjects: e.projects.length,
+        })),
+    [performance]
+  );
+  // Summed per department: a task shared by two departments counts for each,
+  // as it is late (or waiting) for each of them.
+  const overdueBoardTasks = (departmentKpis as any[]).reduce((n, k) => n + (k.overdueTasks ?? 0), 0);
+  const unassignedBoardTasks = (departmentKpis as any[]).reduce((n, k) => n + (k.unassignedTasks ?? 0), 0);
   const { data: notifications = [] } = trpc.notifications.getAll.useQuery();
   const utils = trpc.useUtils();
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
@@ -58,10 +112,11 @@ export default function AdminDashboard() {
     utils.admin.getEmployeeStatusSnapshot.invalidate();
     utils.admin.getLeaveRequests.invalidate();
     utils.admin.getFormSubmissions.invalidate();
-    utils.admin.getProjectsOverview.invalidate();
-    utils.admin.getOngoingTasks.invalidate();
+    utils.fpb.getProjects.invalidate();
+    utils.fpb.getOngoingTasks.invalidate();
     utils.admin.getAverageHours.invalidate();
-    utils.admin.getResourcePerformance.invalidate();
+    utils.fpb.getPerformance.invalidate();
+    utils.fpb.getDepartmentKpis.invalidate();
     utils.notifications.getAll.invalidate();
   };
 
@@ -210,138 +265,136 @@ export default function AdminDashboard() {
     return <Redirect to="/admin/team" />;
   }
 
+  const greeting = new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening";
+
   return (
     <AdminLayout title="Admin Dashboard">
-      <div className="space-y-6">
-        {/* Greeting */}
-        <Card className="p-6 bg-[#10140f] text-white">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-2">
-              <h2 className="text-xl font-semibold">
-                Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {user?.name || "Admin"}!
-              </h2>
-              <p className="text-sm text-white/70">
-                Here's what's happening with your team today
-              </p>
-              <div className="flex flex-wrap gap-6 text-sm text-white/70">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  <span><strong className="text-white">{workingNowCount}</strong> employees currently working</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-orange-400" />
-                  <span><strong className="text-white">{pendingLeaves.length}</strong> pending leave requests</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MessageSquareText className="h-4 w-4 text-sky-400" />
-                  <span><strong className="text-white">{pendingForms.length}</strong> pending form responses</span>
-                </div>
-              </div>
+      <div className="now-page">
+        <NowPageHeader
+          title={`Good ${greeting}, ${user?.name || "Admin"}!`}
+          subtitle={`${format(new Date(), "EEEE, d MMMM yyyy")} · Here's what's happening with your team today`}
+          actions={
+            <div className="now-header-actions">
+              <button type="button" className="now-btn white sm" onClick={refreshAll}>
+                <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+                Refresh
+              </button>
             </div>
-            <Button
-              variant="outline"
-              className="self-start md:self-auto border-0 bg-[linear-gradient(135deg,#ff4b1f,#ff9068)] text-[#10140f] hover:brightness-95 hover:text-[#10140f]"
-              onClick={refreshAll}
-            >
-              <RefreshCcw className="mr-2 h-4 w-4" />
-              Refresh
-            </Button>
-          </div>
-        </Card>
+          }
+        />
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="p-4 rounded-2xl">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-              <Users className="h-4 w-4 text-green-500" />
-              Online Now
+        {/* KPI strip */}
+        <div className="now-stat-strip" aria-label="Today at a glance">
+          <div>
+            <div className="now-stat-label">Online now</div>
+            <div className="now-stat-value tabular-nums">
+              {workingNowCount}/{totalEmployeesCount}
             </div>
-            <div className="text-2xl font-bold">{workingNowCount}/{totalEmployeesCount}</div>
-          </Card>
-          <Card className="p-4 rounded-2xl">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-              <Award className="h-4 w-4 text-yellow-500" />
-              Most Punctual
+            <div className="now-stat-label">employees currently working</div>
+          </div>
+          <div>
+            <div className="now-stat-label">Pending leaves</div>
+            <div className={`now-stat-value tabular-nums${pendingLeaves.length ? " now-warn" : ""}`}>{pendingLeaves.length}</div>
+            <div className="now-stat-label">
+              <Link href="/admin/leaves" className="now-link" style={{ fontSize: 13 }}>
+                waiting for a decision
+              </Link>
             </div>
-            <div className="text-base font-semibold truncate">{mostPunctual}</div>
-          </Card>
-          <Card className="p-4 rounded-2xl">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-              <Briefcase className="h-4 w-4 text-blue-500" />
-              Active Projects
+          </div>
+          <div>
+            <div className="now-stat-label">Pending forms</div>
+            <div className={`now-stat-value tabular-nums${pendingForms.length ? " now-warn" : ""}`}>{pendingForms.length}</div>
+            <div className="now-stat-label">
+              <Link href="/admin/forms" className="now-link" style={{ fontSize: 13 }}>
+                responses to review
+              </Link>
             </div>
-            <div className="text-2xl font-bold">{activeProjects.length}</div>
-          </Card>
-          <Card className="p-4 rounded-2xl">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-              <ListTodo className="h-4 w-4 text-purple-500" />
-              Ongoing Tasks
+          </div>
+          <div>
+            <div className="now-stat-label">Active projects</div>
+            <div className="now-stat-value tabular-nums">{activeProjects.length}</div>
+            <div className="now-stat-label">{ongoingTasks.length} ongoing tasks</div>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div className="now-stat-label flex items-center gap-1.5">
+              <Award className="h-3.5 w-3.5" aria-hidden="true" />
+              Most punctual
             </div>
-            <div className="text-2xl font-bold">{ongoingTasks.length}</div>
-          </Card>
+            <div className="now-stat-value truncate" style={{ fontSize: 20 }} title={mostPunctual}>
+              {mostPunctual}
+            </div>
+            <div className="now-stat-label">earliest clock-in today</div>
+          </div>
         </div>
 
-        {/* Key Metrics */}
-        <Card className="p-6 rounded-2xl">
-          <h3 className="font-semibold mb-4">Key Metrics</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {/* Key metrics */}
+        <section className="now-card" aria-labelledby="admin-key-metrics">
+          <div className="now-card-head">
+            <h2 className="now-h2" id="admin-key-metrics">Key metrics</h2>
+          </div>
+          <div className="now-stat-grid">
             <div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                <TrendingDown className="h-3.5 w-3.5 text-green-500" />
-                Absence Rate
+              <div className="now-stat-label flex items-center gap-1.5">
+                <TrendingDown className="h-3.5 w-3.5" aria-hidden="true" />
+                Absence rate
               </div>
-              <div className="text-2xl font-bold">
+              <div className="now-stat-value tabular-nums">
                 {totalEmployeesCount ? ((onLeaveCount / totalEmployeesCount) * 100).toFixed(1) : "0.0"}%
               </div>
             </div>
             <div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                <Clock className="h-3.5 w-3.5 text-orange-500" />
-                Tardiness
+              <div className="now-stat-label flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                Overdue tasks
               </div>
-              <div className="text-2xl font-bold">5.2%</div>
+              <div className={`now-stat-value tabular-nums${overdueBoardTasks ? " now-warn" : ""}`}>{overdueBoardTasks}</div>
             </div>
             <div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                <TrendingUp className="h-3.5 w-3.5 text-blue-500" />
-                OT %
+              <div className="now-stat-label flex items-center gap-1.5">
+                <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" />
+                Tasks not assigned
               </div>
-              <div className="text-2xl font-bold">12%</div>
+              <div className="now-stat-value tabular-nums">{unassignedBoardTasks}</div>
             </div>
             <div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                <Target className="h-3.5 w-3.5 text-purple-500" />
+              <div className="now-stat-label flex items-center gap-1.5">
+                <Target className="h-3.5 w-3.5" aria-hidden="true" />
                 Capacity
               </div>
-              <div className="text-2xl font-bold">
+              <div className="now-stat-value tabular-nums">
                 {totalEmployeesCount ? ((workingNowCount / totalEmployeesCount) * 100).toFixed(0) : "0"}%
               </div>
             </div>
           </div>
-        </Card>
+        </section>
 
-        {/* Currently Online + Notifications */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="p-6 lg:col-span-2 rounded-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <h3 className="font-semibold">Currently Online</h3>
-                <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">LIVE</Badge>
+        <div className="now-cols">
+          <div className="now-col-main">
+            {/* Currently online */}
+            <section className="now-card flush" aria-labelledby="admin-online">
+              <div className="now-card-head" style={{ marginBottom: 8, flexWrap: "wrap" }}>
+                <div className="flex items-center gap-2">
+                  <h2 className="now-h2" id="admin-online">Currently online</h2>
+                  <span className="now-pill aa-ok flex items-center gap-1.5">
+                    <span className="aa-dot" style={{ background: CHART_DONE }} aria-hidden="true" />
+                    Live
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 now-small now-muted">
+                  <span>Updated just now</span>
+                  {mapUrl ? (
+                    <a className="now-link" href={mapUrl} target="_blank" rel="noreferrer">
+                      View map
+                    </a>
+                  ) : null}
+                </div>
               </div>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span>Updated just now</span>
-                {mapUrl ? (
-                  <a className="text-primary hover:underline" href={mapUrl} target="_blank" rel="noreferrer">
-                    View Map
-                  </a>
-                ) : null}
-              </div>
-            </div>
-            <div className="space-y-4">
               {onlineEmployees.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No employees are online right now.</div>
+                <div className="now-row now-muted" style={{ borderTop: 0 }}>
+                  No employees are online right now.
+                </div>
               ) : (
-                onlineEmployees.map((emp: any) => {
+                onlineEmployees.map((emp: any, index: number) => {
                   const distanceLabel =
                     typeof emp.locationDistanceKm === "number"
                       ? `${emp.locationDistanceKm.toFixed(1)} km from office`
@@ -354,282 +407,314 @@ export default function AdminDashboard() {
                   return (
                     <div
                       key={emp.id}
-                      className="rounded-2xl border border-emerald-500/20 bg-[#17201c] p-4"
+                      className="now-row wrap"
+                      style={{ alignItems: "flex-start", borderTop: index === 0 ? 0 : undefined }}
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                          <div className="h-10 w-10 rounded-full bg-[#3a1b12] flex items-center justify-center text-sm font-semibold text-orange-200">
-                            {getInitials(emp.name)}
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-sm font-semibold">{emp.name}</p>
-                            <p className="text-xs text-muted-foreground">{emp.designation}</p>
-                            <button
-                              type="button"
-                              className={`flex items-center gap-2 text-xs text-muted-foreground ${hasLocation ? "hover:text-foreground transition-colors" : "cursor-default"}`}
-                              onClick={() => hasLocation && handleLocationOpen(emp)}
-                            >
-                              <MapPin className="h-3.5 w-3.5 text-emerald-300" />
-                              <span className="truncate max-w-[320px]">{locationLabel}</span>
-                              {distanceLabel ? (
-                                <span className="text-orange-300">({distanceLabel})</span>
-                              ) : null}
-                            </button>
-                            <p className="text-xs text-muted-foreground">
-                              Clocked in at {emp.timeIn ? format(new Date(emp.timeIn), "hh:mm a") : "--"}
-                            </p>
-                          </div>
+                      <div className="aa-row-main">
+                        <div className="now-avatar" aria-hidden="true">
+                          {getInitials(emp.name)}
                         </div>
-                        <div className="flex items-center gap-3">
-                          {officeTag ? (
-                            <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                              <Wifi className="h-3.5 w-3.5 mr-1" />
-                              {officeTag}
-                            </Badge>
-                          ) : null}
-                          <Badge variant="secondary" className="text-xs">
-                            {emp.hours || "--"}
-                          </Badge>
+                        <div className="aa-clamp" style={{ flex: "1 1 0" }}>
+                          <div className="now-row-title">{emp.name}</div>
+                          <div className="now-row-sub">
+                            {emp.designation}
+                            {emp.designation ? " · " : ""}
+                            Clocked in at{" "}
+                            <span className="tabular-nums">{emp.timeIn ? format(new Date(emp.timeIn), "hh:mm a") : "--"}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className={`mt-1 flex max-w-full items-center gap-1.5 text-left now-small now-muted ${hasLocation ? "hover:text-foreground transition-colors" : "cursor-default"}`}
+                            onClick={() => hasLocation && handleLocationOpen(emp)}
+                          >
+                            <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            <span className="truncate">{locationLabel}</span>
+                            {distanceLabel ? (
+                              <span className="shrink-0 now-warn">({distanceLabel})</span>
+                            ) : null}
+                          </button>
                         </div>
+                      </div>
+                      <div className="aa-row-side">
+                        {officeTag ? (
+                          <span className="now-pill lime flex items-center gap-1">
+                            <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
+                            {officeTag}
+                          </span>
+                        ) : null}
+                        <span className="now-pill tabular-nums aa-plain">{emp.hours || "--"}</span>
                       </div>
                     </div>
                   );
                 })
               )}
-            </div>
-          </Card>
+            </section>
 
-          <Card className="p-6 rounded-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Bell className="h-4 w-4 text-orange-400" />
-                <h3 className="font-semibold">Notifications</h3>
+            {/* Average hours */}
+            <section className="now-card" aria-labelledby="admin-avg-hours">
+              <div className="now-card-head">
+                <h2 className="now-h2" id="admin-avg-hours">Employee average hours</h2>
+                <span className="now-small now-muted">This week</span>
               </div>
-              <Link href="/notifications">
-                <Button variant="link" className="p-0 h-auto text-primary">
-                  View All
-                </Button>
-              </Link>
-            </div>
-            {notifications.length === 0 ? (
-              <div className="text-sm text-muted-foreground py-10 text-center">
-                No notifications yet
+              <div className="aa-chart">
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={avgHoursData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.2} />
+                    <XAxis dataKey="day" tick={{ fontSize: 12, fill: "currentColor" }} stroke="currentColor" />
+                    <YAxis tick={{ fontSize: 12, fill: "currentColor" }} stroke="currentColor" width={32} />
+                    <Tooltip contentStyle={chartTooltipStyle} />
+                    <Line type="monotone" dataKey="hours" stroke={CHART_INDIGO} strokeWidth={2.5} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
-            ) : (
-              <div className="space-y-3">
-                {notifications.slice(0, 4).map((notif: any) => (
-                  <div key={notif.id} className="rounded-xl bg-muted/60 p-3">
-                    <p className="text-sm font-medium">{notif.title || "Notification"}</p>
-                    <p className="text-xs text-muted-foreground">{notif.message}</p>
-                    <p className="text-xs text-muted-foreground">
+            </section>
+
+            {/* Ongoing projects */}
+            <section className="now-card" style={{ gap: 16 }} aria-labelledby="admin-projects">
+              <div className="now-card-head">
+                <h2 className="now-h2" id="admin-projects">Ongoing projects</h2>
+                <span className="now-pill">{activeProjects.length}</span>
+              </div>
+              {activeProjects.length === 0 ? (
+                <p className="now-muted text-sm">No active projects.</p>
+              ) : (
+                <div className="now-project-grid">
+                  {activeProjects.map((project: any) => (
+                    <div key={project.id} className="now-tile">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="now-row-title aa-clamp">{project.name}</span>
+                        <span className="text-sm font-bold tabular-nums">{project.progress || 0}%</span>
+                      </div>
+                      <div className="now-bar on-tile">
+                        <span style={{ width: `${project.progress || 0}%` }} />
+                      </div>
+                      <div className="flex items-center justify-between gap-2 now-row-sub">
+                        <span className="aa-clamp">{project.assignees?.join(", ") || "Unassigned"}</span>
+                        <span className="shrink-0">{project.tasks || 0} tasks</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Resource performance */}
+            <section className="now-card" aria-labelledby="admin-performance">
+              <div className="now-card-head" style={{ flexWrap: "wrap" }}>
+                <h2 className="now-h2" id="admin-performance">Resource performance</h2>
+                <span className="now-small now-muted">
+                  This month on the board: tasks done vs still open, and projects per person
+                </span>
+              </div>
+              {performanceData.length === 0 ? (
+                <div className="now-muted py-10 text-center">
+                  No performance data available
+                </div>
+              ) : (
+                <div className="aa-chart">
+                  <ResponsiveContainer width="100%" height={260}>
+                    <ComposedChart data={performanceData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.2} />
+                      <XAxis dataKey="name" tick={{ fontSize: 12, fill: "currentColor" }} stroke="currentColor" />
+                      <YAxis yAxisId="left" tick={{ fontSize: 12, fill: "currentColor" }} stroke="currentColor" width={32} />
+                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12, fill: "currentColor" }} stroke="currentColor" width={32} />
+                      <Tooltip contentStyle={chartTooltipStyle} />
+                      <Bar yAxisId="left" dataKey="tasksCompleted" stackId="tasks" fill={CHART_DONE} />
+                      <Bar yAxisId="left" dataKey="tasksPending" stackId="tasks" fill={CHART_WAITING} radius={[6, 6, 0, 0]} />
+                      <Line yAxisId="right" type="monotone" dataKey="activeProjects" stroke={CHART_INDIGO} strokeWidth={2.5} dot={{ r: 3 }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-4 now-small now-muted">
+                <span className="flex items-center gap-2">
+                  <span className="aa-dot" style={{ background: CHART_DONE }} />
+                  Tasks completed
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="aa-dot" style={{ background: CHART_WAITING }} />
+                  Tasks pending
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="aa-dot" style={{ background: CHART_INDIGO }} />
+                  Active projects
+                </span>
+              </div>
+            </section>
+          </div>
+
+          <div className="now-col-side">
+            {/* Pending leaves */}
+            <section className="now-card flush" aria-labelledby="admin-pending-leaves">
+              <div className="now-card-head" style={{ marginBottom: 8 }}>
+                <h2 className="now-h2" id="admin-pending-leaves">Pending leaves</h2>
+                <div className="flex items-center gap-3">
+                  <span className={`now-pill${pendingLeaves.length ? " warn-soft" : ""}`}>{pendingLeaves.length}</span>
+                  <Link href="/admin/leaves" className="now-link">Open</Link>
+                </div>
+              </div>
+              {pendingLeaves.length === 0 ? (
+                <div className="now-row now-muted" style={{ borderTop: 0 }}>
+                  No leave requests waiting.
+                </div>
+              ) : (
+                pendingLeaves.map((leave: any, index: number) => (
+                  <div
+                    key={leave.id}
+                    className="flex flex-col gap-3 py-4"
+                    style={{ borderTop: index === 0 ? 0 : "1px solid var(--secondary)" }}
+                  >
+                    <div className="aa-clamp">
+                      <div className="now-row-title">{leave.user?.name || "Employee"}</div>
+                      <div className="now-row-sub">
+                        <span className="capitalize">{leave.leaveType}</span> · {leave.startDate ? format(new Date(leave.startDate), "MMM dd") : "--"} - {leave.endDate ? format(new Date(leave.endDate), "MMM dd") : "--"}
+                      </div>
+                    </div>
+                    <Link href="/admin/leaves" className="now-btn ink sm grow text-center">
+                      Review
+                    </Link>
+                  </div>
+                ))
+              )}
+            </section>
+
+            {/* Pending forms */}
+            <section className="now-card flush" aria-labelledby="admin-pending-forms">
+              <div className="now-card-head" style={{ marginBottom: 8 }}>
+                <h2 className="now-h2" id="admin-pending-forms">Pending forms</h2>
+                <span className={`now-pill${pendingForms.length ? " warn-soft" : ""}`}>{pendingForms.length}</span>
+              </div>
+              {pendingForms.length === 0 ? (
+                <div className="now-row now-muted" style={{ borderTop: 0 }}>
+                  No form responses waiting.
+                </div>
+              ) : (
+                pendingForms.map((form: any, index: number) => (
+                  <div
+                    key={form.id}
+                    className="flex flex-col gap-3 py-4"
+                    style={{ borderTop: index === 0 ? 0 : "1px solid var(--secondary)" }}
+                  >
+                    <div className="aa-clamp">
+                      <div className="now-row-title">{form.user?.name || "Employee"}</div>
+                      <div className="now-row-sub">{form.subject || form.formType}</div>
+                      <div className="now-row-sub">
+                        {form.createdAt
+                          ? formatDistanceToNow(new Date(form.createdAt), { addSuffix: true })
+                          : "--"}
+                      </div>
+                    </div>
+                    <Link href="/admin/forms" className="now-btn tint sm text-center">
+                      Review
+                    </Link>
+                  </div>
+                ))
+              )}
+              <div className="py-3 text-center" style={{ borderTop: "1px solid var(--secondary)" }}>
+                <Link href="/admin/forms" className="now-link">
+                  View all forms
+                </Link>
+              </div>
+            </section>
+
+            {/* Notifications */}
+            <section className="now-card flush" aria-labelledby="admin-notifications">
+              <div className="now-card-head" style={{ marginBottom: 8 }}>
+                <h2 className="now-h2 flex items-center gap-2" id="admin-notifications">
+                  <Bell className="h-4 w-4" aria-hidden="true" />
+                  Notifications
+                </h2>
+                <Link href="/notifications" className="now-link">
+                  View all
+                </Link>
+              </div>
+              {notifications.length === 0 ? (
+                <div className="now-row now-muted justify-center py-10" style={{ borderTop: 0 }}>
+                  No notifications yet
+                </div>
+              ) : (
+                notifications.slice(0, 4).map((notif: any, index: number) => (
+                  <div
+                    key={notif.id}
+                    className="py-3 aa-clamp"
+                    style={{ borderTop: index === 0 ? 0 : "1px solid var(--secondary)" }}
+                  >
+                    <div className="text-sm font-semibold">{notif.title || "Notification"}</div>
+                    <div className="now-row-sub">{notif.message}</div>
+                    <div className="now-row-sub">
                       {notif.createdAt
                         ? formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })
                         : "--"}
-                    </p>
+                    </div>
                   </div>
-                ))}
+                ))
+              )}
+            </section>
+
+            {/* Ongoing tasks */}
+            <section className="now-card flush" aria-labelledby="admin-ongoing-tasks">
+              <div className="now-card-head" style={{ marginBottom: 8 }}>
+                <h2 className="now-h2" id="admin-ongoing-tasks">Ongoing tasks</h2>
+                <span className="now-pill">{ongoingTasks.length}</span>
               </div>
-            )}
-          </Card>
+              {ongoingTasks.length === 0 ? (
+                <div className="now-row now-muted" style={{ borderTop: 0 }}>
+                  No ongoing tasks.
+                </div>
+              ) : (
+                ongoingTasks.map((task: any, index: number) => (
+                  <div
+                    key={task.id}
+                    className="py-3"
+                    style={{ borderTop: index === 0 ? 0 : "1px solid var(--secondary)" }}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-sm font-semibold aa-clamp">{task.title}</span>
+                      <span className={`now-pill${task.priority === "high" ? " risk" : ""}`}>
+                        {task.priority}
+                      </span>
+                    </div>
+                    <div className="now-row-sub mt-1">
+                      {(task.assignees || [])
+                        .map((assignee: any) => assignee?.name || assignee?.employeeId || "Employee")
+                        .filter(Boolean)
+                        .join(", ") || "Employee"}
+                    </div>
+                    <div className="now-row-sub">{task.project?.name || "Project"}</div>
+                  </div>
+                ))
+              )}
+            </section>
+          </div>
         </div>
 
-        {/* Pending Leaves + Average Hours */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="p-6 rounded-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Pending Leaves</h3>
-              <Badge variant="secondary" className="text-xs">{pendingLeaves.length}</Badge>
-            </div>
-            <div className="space-y-3">
-              {pendingLeaves.map((leave: any) => (
-                <div key={leave.id} className="p-3 rounded-xl border bg-muted/30 space-y-2">
-                  <div>
-                    <p className="text-sm font-medium">{leave.user?.name || "Employee"}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {leave.leaveType} � {leave.startDate ? format(new Date(leave.startDate), "MMM dd") : "--"} - {leave.endDate ? format(new Date(leave.endDate), "MMM dd") : "--"}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90">
-                      Approve
-                    </Button>
-                    <Button variant="outline" className="flex-1">
-                      Reject
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="p-6 lg:col-span-2 rounded-2xl">
-            <h3 className="font-semibold mb-4">Employee Average Hours (This Week)</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={avgHoursData}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                <XAxis dataKey="day" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Line type="monotone" dataKey="hours" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </Card>
-        </div>
-
-        {/* Ongoing Projects + Ongoing Tasks */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="p-6 rounded-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Pending Forms</h3>
-              <Badge variant="secondary" className="text-xs">{pendingForms.length}</Badge>
-            </div>
-            <div className="space-y-3">
-              {pendingForms.map((form: any) => (
-                <div key={form.id} className="p-3 rounded-xl bg-muted/60">
-                  <p className="text-sm font-medium">{form.user?.name || "Employee"}</p>
-                  <p className="text-xs text-muted-foreground">{form.subject || form.formType}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {form.createdAt
-                      ? formatDistanceToNow(new Date(form.createdAt), { addSuffix: true })
-                      : "--"}
-                  </p>
-                  <Button className="w-full mt-3 bg-primary text-primary-foreground hover:bg-primary/90">
-                    Review
-                  </Button>
-                </div>
-              ))}
-            </div>
-            <Link href="/admin/forms">
-              <Button variant="link" className="w-full mt-4 h-8 text-primary">
-                View All Forms
-              </Button>
+        {/* Advanced reports */}
+        <section className="flex flex-col gap-3" aria-labelledby="admin-reports">
+          <h2 className="now-h2" id="admin-reports">Advanced reports</h2>
+          <div className="now-tile-grid">
+            <Link href="/admin/reports" className="now-tile-btn">
+              <Activity className="h-5 w-5 text-[var(--now-indigo)]" aria-hidden="true" />
+              <strong>Attendance Summary</strong>
+              <span>Who was in, late or away</span>
             </Link>
-          </Card>
-
-          <Card className="p-6 rounded-2xl">
-            <h3 className="font-semibold mb-4">Ongoing Projects</h3>
-            <div className="space-y-4">
-              {activeProjects.map((project: any) => (
-                <div key={project.id} className="p-3 rounded-xl bg-muted/60">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-medium">{project.name}</p>
-                    <span className="text-xs font-semibold">{project.progress || 0}%</span>
-                  </div>
-                  <div className="w-full bg-secondary rounded-full h-2 mb-2">
-                    <div
-                      className="bg-primary h-2 rounded-full"
-                      style={{ width: `${project.progress || 0}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{project.assignees?.join(", ") || "Unassigned"}</span>
-                    <span>{project.tasks || 0} tasks</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="p-6 rounded-2xl">
-            <h3 className="font-semibold mb-4">Ongoing Tasks</h3>
-            <div className="space-y-3">
-              {ongoingTasks.map((task: any) => (
-                <div key={task.id} className="p-3 rounded-xl bg-muted/60">
-                  <div className="flex items-start justify-between mb-2">
-                    <p className="text-sm font-medium">{task.title}</p>
-                    <Badge
-                      variant={task.priority === "high" ? "destructive" : "secondary"}
-                      className="text-xs"
-                    >
-                      {task.priority}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mb-1">
-                    {(task.assignees || [])
-                      .map((assignee: any) => assignee?.name || assignee?.employeeId || "Employee")
-                      .filter(Boolean)
-                      .join(", ") || "Employee"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{task.project?.name || "Project"}</p>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-
-        {/* Resource Performance */}
-        <Card className="p-6 rounded-2xl">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold">Resource Performance</h3>
-            <span className="text-xs text-muted-foreground">
-              Tasks completed vs pending with active projects
-            </span>
-          </div>
-          {performanceData.length === 0 ? (
-            <div className="text-center text-muted-foreground py-10">
-              No performance data available
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <ComposedChart data={performanceData}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Bar yAxisId="left" dataKey="tasksCompleted" stackId="tasks" fill="#22c55e" />
-                <Bar yAxisId="left" dataKey="tasksPending" stackId="tasks" fill="#f97316" />
-                <Line yAxisId="right" type="monotone" dataKey="activeProjects" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          )}
-          <div className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#22c55e]" />
-              Tasks completed
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#f97316]" />
-              Tasks pending
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#3b82f6]" />
-              Active projects
-            </span>
-          </div>
-        </Card>
-
-        {/* Advanced Reports */}
-        <Card className="p-4 rounded-2xl">
-          <h3 className="font-semibold mb-4">Advanced Reports</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Link href="/admin/reports">
-              <Button variant="outline" size="sm" className="w-full justify-start h-auto py-2">
-                <Activity className="h-3.5 w-3.5 mr-2" />
-                <span className="text-xs">Attendance Summary</span>
-              </Button>
+            <Link href="/admin/reports" className="now-tile-btn">
+              <Clock className="h-5 w-5 text-[var(--now-indigo)]" aria-hidden="true" />
+              <strong>OT Analysis</strong>
+              <span>Overtime by person and team</span>
             </Link>
-            <Link href="/admin/reports">
-              <Button variant="outline" size="sm" className="w-full justify-start h-auto py-2">
-                <Clock className="h-3.5 w-3.5 mr-2" />
-                <span className="text-xs">OT Analysis</span>
-              </Button>
+            <Link href="/admin/reports" className="now-tile-btn">
+              <FileCheck className="h-5 w-5 text-[var(--now-indigo)]" aria-hidden="true" />
+              <strong>Audit Trail</strong>
+              <span>Changes made in the portal</span>
             </Link>
-            <Link href="/admin/reports">
-              <Button variant="outline" size="sm" className="w-full justify-start h-auto py-2">
-                <FileCheck className="h-3.5 w-3.5 mr-2" />
-                <span className="text-xs">Audit Trail</span>
-              </Button>
-            </Link>
-            <Link href="/admin/reports">
-              <Button variant="outline" size="sm" className="w-full justify-start h-auto py-2">
-                <AlertCircle className="h-3.5 w-3.5 mr-2" />
-                <span className="text-xs">Exceptions</span>
-              </Button>
+            <Link href="/admin/reports" className="now-tile-btn">
+              <AlertCircle className="h-5 w-5 text-[var(--now-indigo)]" aria-hidden="true" />
+              <strong>Exceptions</strong>
+              <span>Missed punches and odd records</span>
             </Link>
           </div>
-        </Card>
-      
+        </section>
+
         <Dialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen}>
           <DialogContent className="sm:max-w-xl">
             <DialogHeader>
@@ -637,7 +722,7 @@ export default function AdminDashboard() {
             </DialogHeader>
             {selectedCoords ? (
               <div className="space-y-4">
-                <div className="overflow-hidden rounded-xl border border-white/10">
+                <div className="overflow-hidden rounded-2xl" style={{ background: "var(--card)" }}>
                   <iframe
                     src={selectedMapSrc}
                     className="w-full h-56"
@@ -645,35 +730,35 @@ export default function AdminDashboard() {
                     referrerPolicy="no-referrer-when-downgrade"
                   />
                 </div>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-start gap-2">
-                    <MapPin className="h-4 w-4 text-emerald-300 mt-0.5" />
-                    <span>{addressLoading ? "Fetching address..." : selectedAddress}</span>
+                <div className="aa-sub" style={{ gap: 8 }}>
+                  <div className="flex items-start gap-2 text-sm">
+                    <MapPin className="h-4 w-4 mt-0.5 shrink-0 text-[var(--now-indigo)]" aria-hidden="true" />
+                    <span className="aa-clamp">{addressLoading ? "Fetching address..." : selectedAddress}</span>
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="now-small now-muted tabular-nums">
                     {selectedCoords.lat.toFixed(5)}, {selectedCoords.lng.toFixed(5)}
                   </div>
                   {typeof selectedCoords.accuracy === "number" ? (
-                    <div className="text-xs text-muted-foreground">
+                    <div className="now-small now-muted">
                       Accuracy: {Math.round(selectedCoords.accuracy)} m
                     </div>
                   ) : null}
                   {capturedLabel ? (
-                    <div className="text-xs text-muted-foreground">
+                    <div className="now-small now-muted">
                       Captured {capturedLabel}
                     </div>
                   ) : null}
                   {selectedLocation?.locationTag ? (
-                    <Badge className="w-fit bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    <span className="now-pill lime w-fit">
                       {selectedLocation.locationTag === "office" ? "Office" : "Remote"}
-                    </Badge>
+                    </span>
                   ) : null}
                 </div>
                 <a
                   href={`https://www.google.com/maps?q=${selectedCoords.lat},${selectedCoords.lng}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-sm text-primary hover:underline"
+                  className="now-link"
                 >
                   Open in Maps
                 </a>
@@ -687,23 +772,3 @@ export default function AdminDashboard() {
     </AdminLayout>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

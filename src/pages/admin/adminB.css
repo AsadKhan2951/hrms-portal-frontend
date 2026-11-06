@@ -1,0 +1,89 @@
+/* Shared pieces for the reports, organisation, announcements, form responses
+   and team pages. Everything is built on the Now tokens in index.css so it
+   follows light and dark mode. */
+
+:root {
+  --nb-ok: #1f7a4d;
+  --nb-bad: #b42318;
+}
+.dark {
+  --nb-ok: #6cc28c;
+  --nb-bad: #ff8f80;
+}
+
+.nb-ok { color: var(--nb-ok); }
+.nb-bad { color: var(--nb-bad); }
+.nb-info { color: var(--primary); }
+
+.now-pill.nb-ok-soft { background: color-mix(in srgb, var(--nb-ok) 16%, transparent); color: var(--nb-ok); }
+.now-pill.nb-bad-soft { background: color-mix(in srgb, var(--nb-bad) 14%, transparent); color: var(--nb-bad); }
+.now-pill.nb-info-soft { background: var(--now-indigo-tint); color: var(--primary); }
+.now-pill.nb-plain { text-transform: none; }
+
+/* Small field label above a select or input */
+.nb-label { display: block; font-size: 13px; font-weight: 600; color: var(--muted-foreground); margin-bottom: 6px; }
+.nb-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 14px 16px; }
+.nb-filters .wide { grid-column: span 2; }
+@media (max-width: 899px) { .nb-filters .wide { grid-column: auto; } }
+
+/* Tables inside a now-card */
+.nb-table-wrap { overflow-x: auto; max-width: 100%; }
+.nb-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.nb-table th {
+  text-align: left; font-size: 13px; font-weight: 600; color: var(--muted-foreground);
+  padding: 8px 12px 10px; white-space: nowrap; border-bottom: 1px solid var(--secondary);
+}
+.nb-table td { padding: 12px; border-top: 1px solid var(--secondary); vertical-align: middle; }
+.nb-table tbody tr:first-child td { border-top: 0; }
+.nb-table tbody tr:hover td { background: color-mix(in srgb, var(--background) 70%, transparent); }
+.nb-table th:first-child, .nb-table td:first-child { padding-left: 0; }
+.nb-table th:last-child, .nb-table td:last-child { padding-right: 0; }
+.nb-table .num { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nb-table tfoot td { border-top: 2px solid var(--secondary); font-weight: 700; }
+.nb-table tr.off td { color: var(--muted-foreground); }
+
+/* The muster roll: a narrow grid with the name column pinned */
+.nb-muster { border-collapse: collapse; font-size: 12px; }
+.nb-muster th, .nb-muster td { padding: 6px 4px; text-align: center; min-width: 26px; }
+.nb-muster th { color: var(--muted-foreground); font-weight: 600; border-bottom: 1px solid var(--secondary); }
+.nb-muster td { border-top: 1px solid var(--secondary); font-weight: 700; font-family: var(--font-num); }
+.nb-muster tbody tr:first-child td { border-top: 0; }
+.nb-muster .name {
+  position: sticky; left: 0; z-index: 1; background: var(--card); text-align: left;
+  min-width: 140px; padding-left: 0; white-space: nowrap; font-family: var(--font-body); font-weight: 600; font-size: 13px;
+}
+.nb-muster th.name { font-weight: 600; color: var(--muted-foreground); }
+
+/* Picker list of reports */
+.nb-report-list { display: flex; flex-direction: column; gap: 4px; }
+.nb-report-btn {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 8px 12px;
+  border: 0; border-radius: 12px; background: transparent; color: var(--foreground);
+  text-align: left; font-size: 14px; font-weight: 600;
+}
+.nb-report-btn:hover { background: var(--background); }
+.nb-report-btn[aria-pressed="true"] { background: var(--foreground); color: var(--card); }
+.nb-report-btn[aria-pressed="true"] .now-pill { background: var(--card); color: var(--foreground); }
+.nb-report-btn > span.label { flex: 1 1 auto; min-width: 0; }
+
+/* A plain status dot */
+.nb-dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; background: var(--muted-foreground); opacity: 0.5; flex: 0 0 auto; }
+.nb-dot.ok { background: var(--nb-ok); opacity: 1; }
+.nb-dot.info { background: var(--primary); opacity: 1; }
+.nb-dot.warn { background: var(--now-warn); opacity: 1; }
+
+/* Soft inner box, e.g. the details panel in a dialog */
+.nb-well { background: var(--background); border-radius: 14px; padding: 14px 16px; }
+.nb-kv { display: flex; flex-direction: column; gap: 10px; }
+.nb-kv > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 14px; }
+.nb-kv > div > span:first-child { color: var(--muted-foreground); font-weight: 600; }
+
+/* Scroll box for long lists inside a card */
+.nb-scroll { max-height: 320px; overflow-y: auto; }
+.nb-scroll.tall { max-height: 380px; }
+
+/* Card used as a soft notice */
+.now-card.nb-notice { background: var(--now-warn-bg); color: #4a2400; gap: 4px; }
+.now-card.nb-notice .now-row-sub { color: #6b3200; }
+.now-card.nb-soft { background: transparent; border: 1.5px dashed var(--border); }
+.now-icon-btn.nb-bad, .now-icon-btn.nb-bad:hover { color: var(--nb-bad); }

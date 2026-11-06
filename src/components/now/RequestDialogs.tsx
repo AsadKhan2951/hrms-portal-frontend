@@ -178,8 +178,9 @@ export function OvertimeDialog({ open, onOpenChange }: DialogProps) {
   const [taskId, setTaskId] = useState("");
   const [description, setDescription] = useState("");
 
-  const { data: projects = [] } = trpc.projects.getMyProjects.useQuery(undefined, { enabled: open });
-  const { data: tasks = [] } = trpc.projects.getTasks.useQuery({ projectId }, { enabled: open && Boolean(projectId) });
+  // Overtime is logged against a board project and one of its tasks.
+  const { data: projects = [] } = trpc.fpb.getProjects.useQuery(undefined, { enabled: open });
+  const { data: tasks = [] } = trpc.fpb.getTasks.useQuery({ projectId }, { enabled: open && Boolean(projectId) });
 
   useEffect(() => {
     if (!open) return;
@@ -261,7 +262,7 @@ export function OvertimeDialog({ open, onOpenChange }: DialogProps) {
             {projects.length > 0 ? (
               projects.map((project: any) => (
                 <SelectItem key={project.id} value={String(project.id)}>
-                  {project.name}
+                  {project.title ?? project.name}
                 </SelectItem>
               ))
             ) : (

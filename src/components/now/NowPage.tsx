@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { useContext, type ReactNode } from "react";
 import { Link } from "wouter";
 import { Bell } from "lucide-react";
 import LayoutWrapper from "@/components/LayoutWrapper";
 import { trpc } from "@/lib/trpc";
+import { AdminShellContext } from "@/components/portal";
 
 /** The four-point star that marks anything Wingman says or offers. */
 export function WingmanMark({ size = 18, className }: { size?: number; className?: string }) {
@@ -47,6 +48,8 @@ type NowPageHeaderProps = {
 };
 
 export function NowPageHeader({ title, subtitle, lead, actions, hideAsk }: NowPageHeaderProps) {
+  // The Admin Panel's top bar already carries the bell, so it is not repeated.
+  const inAdmin = useContext(AdminShellContext);
   return (
     <header className="now-page-header">
       <div className="now-page-heading">
@@ -56,7 +59,7 @@ export function NowPageHeader({ title, subtitle, lead, actions, hideAsk }: NowPa
           {subtitle ? <div className="now-page-sub">{subtitle}</div> : null}
         </div>
       </div>
-      {actions ?? <NowHeaderTools hideAsk={hideAsk} />}
+      {actions ?? (inAdmin ? null : <NowHeaderTools hideAsk={hideAsk} />)}
     </header>
   );
 }

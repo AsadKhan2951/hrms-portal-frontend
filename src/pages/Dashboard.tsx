@@ -142,7 +142,9 @@ export default function Dashboard() {
     endDate: weekEnd,
   });
 
-  const { data: myProjects } = trpc.projects.getMyProjects.useQuery();
+  // Projects and tasks come from the board (the old project system is gone).
+  const { data: boardProjects = [] } = trpc.fpb.getProjects.useQuery();
+  const myProjects = (boardProjects as any[]).map(p => ({ ...p, name: p.title }));
   const utils = trpc.useUtils();
 
   useEffect(() => {
@@ -255,14 +257,26 @@ export default function Dashboard() {
   }, [weekAttendance, currentTime]);
 
   // ---- Data for the Now home layout ----
-  const { data: myTasks = [] } = trpc.projects.getMyTasks.useQuery();
+  const { data: boardTasks = [] } = trpc.fpb.getMyTasks.useQuery();
+  // The home page's task shape: "completed" when done, due date as completionDate.
+  const myTasks = useMemo(
+    () =>
+      (boardTasks as any[]).map(task => ({
+        ...task,
+        status: task.done ? "completed" : task.status,
+        completionDate: task.dueDate,
+        project: { id: task.projectId, name: task.projectTitle },
+      })),
+    [boardTasks]
+  );
   const { data: myLeaves = [] } = trpc.leaves.getMyLeaves.useQuery();
   const { data: announcements = [] } = trpc.dashboard.getAnnouncements.useQuery();
   const { data: myMeetings = [] } = trpc.meetings.getMyMeetings.useQuery();
-  const updateTaskMutation = trpc.projects.updateTask.useMutation({
-    onSuccess: () => {
-      utils.projects.getMyTasks.invalidate();
-      utils.projects.getMyTaskStats.invalidate();
+  const updateTaskMutation = trpc.fpb.setTaskStage.useMutation({
+    onSuccess: (_: unknown, vars: { status: string }) => {
+      utils.fpb.getMyTasks.invalidate();
+      utils.fpb.getBoard.invalidate();
+      if (vars.status === "in_review") toast.success("Sent for review");
     },
     onError: (error: any) => toast.error(error?.message || "Could not update the task"),
   });
@@ -455,7 +469,9 @@ export default function Dashboard() {
                         onClick={() =>
                           updateTaskMutation.mutate({
                             taskId: String(task.id),
-                            status: done ? "todo" : "completed",
+                            // A department task is finished by its owner
+                            // department's head, so its people send it for review.
+                            status: done ? "in_progress" : task.departmentTask ? "in_review" : "done",
                           })
                         }
                       >
@@ -475,7 +491,7 @@ export default function Dashboard() {
               <section className="now-card" style={{ gap: 16 }}>
                 <div className="now-card-head">
                   <h2 className="now-h2">Project health</h2>
-                  <Link href="/projects" className="now-link">All projects</Link>
+                  <Link href="/board" className="now-link">All projects</Link>
                 </div>
                 {myProjects && myProjects.length > 0 ? (
                   <div className="now-project-grid">

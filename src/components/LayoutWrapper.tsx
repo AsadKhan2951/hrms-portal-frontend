@@ -2,7 +2,7 @@ import { useEffect, useMemo, ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { isAnyHead, roleLabel } from "@/lib/roles";
+import { isAnyHead, isOrgWide, roleLabel } from "@/lib/roles";
 import NowShell, { type NowNavItem } from "@/components/NowShell";
 import { useRealtime } from "@/_core/hooks/useRealtime";
 import {
@@ -11,13 +11,17 @@ import {
   MessageSquare,
   Home,
   Calendar,
-  Shield,
   LayoutGrid,
+  Columns3,
+  Users,
+  FileCheck,
+  ClipboardCheck,
   Sparkles,
   CreditCard,
   Megaphone,
 } from "lucide-react";
 import { GlobalChatWidget } from "@/components/GlobalChatWidget";
+import AdminShell from "@/components/AdminShell";
 import { AnnouncementPopup } from "@/components/AnnouncementPopup";
 import { toast } from "sonner";
 
@@ -71,7 +75,32 @@ function useClockOutReminder() {
   }, [clockedIn, enabled, navigate]);
 }
 
-export default function LayoutWrapper({ children, chatWidget = false }: LayoutWrapperProps) {
+/**
+ * The page shell, chosen by role: one sidebar per person, no switching
+ * between an "admin view" and an "employee view". Admins and heads of
+ * operations get the admin sidebar with everything in it; everyone else the
+ * employee one, where a department head also finds their team's pages.
+ */
+export default function LayoutWrapper(props: LayoutWrapperProps) {
+  const { user } = useAuth();
+  if (isOrgWide(user?.role)) {
+    return (
+      <>
+        <ClockOutReminder />
+        <AdminShell>{props.children}</AdminShell>
+      </>
+    );
+  }
+  return <EmployeeLayout {...props} />;
+}
+
+/** The clock-out reminder as a component, so either shell can carry it. */
+function ClockOutReminder() {
+  useClockOutReminder();
+  return null;
+}
+
+function EmployeeLayout({ children, chatWidget = false }: LayoutWrapperProps) {
   useClockOutReminder();
   const { user, logout } = useAuth();
   const currentUserId = user?.id ? String(user.id) : null;
@@ -115,6 +144,16 @@ export default function LayoutWrapper({ children, chatWidget = false }: LayoutWr
     { icon: Megaphone, label: "News", path: "/announcements" },
   ];
 
+  // A department head runs their team from the same sidebar.
+  if (isAnyHead(user?.role)) {
+    menuItems.push(
+      { icon: Columns3, label: "Department Board", path: "/department-board" },
+      { icon: Users, label: "My Team", path: "/admin/team" },
+      { icon: FileCheck, label: "Leave Approvals", path: "/admin/leaves" },
+      { icon: ClipboardCheck, label: "Team Requests", path: "/admin/requests" },
+    );
+  }
+
   const navItems: NowNavItem[] = menuItems.map(item =>
     item.path === "/chat" ? { ...item, count: unreadChatCount } : item
   );
@@ -125,7 +164,6 @@ export default function LayoutWrapper({ children, chatWidget = false }: LayoutWr
       tabPaths={["/dashboard", "/board", "/wingman", "/attendance", "/chat"]}
       user={user}
       roleLabel={roleLabel(user?.role)}
-      footerItems={isAnyHead(user?.role) ? [{ icon: Shield, label: "Admin Panel", path: "/admin" }] : []}
       onLogout={handleLogout}
       compact
     >

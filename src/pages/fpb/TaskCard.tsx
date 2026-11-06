@@ -9,9 +9,15 @@ import { checklistProgress } from "./markdownParser";
 
 /** One task card on a project's board. */
 export function TaskCard({
-  task, index, users, onOpen, myId, labels = [], onDelete,
+  task, index, users, onOpen, myId, labels = [], onDelete, departments = [], projectTitle, note,
 }: {
+  /** A short warning under the title, e.g. "Needs an assignee". */
+  note?: string;
   task: any; index: number; users: any[];
+  /** Every department, to name the ones this card is with. */
+  departments?: any[];
+  /** Shown on the department board, where cards come from many projects. */
+  projectTitle?: string;
   /** The project's labels; the card shows the ones it carries. */
   labels?: any[];
   onOpen: () => void;
@@ -35,6 +41,9 @@ export function TaskCard({
   const descChecks = checklistProgress(task.description);
   const checkDone = doneSubs + descChecks.done;
   const checkTotal = subtasks.length + descChecks.total;
+  const departmentIds: string[] = (task.departmentIds ?? []).map(String);
+  const ownerDepartment = task.ownerDepartmentId ? String(task.ownerDepartmentId) : departmentIds[0];
+  const cardDepartments = departments.filter((d: any) => departmentIds.includes(String(d.id)));
 
   return (
     <Draggable draggableId={String(task.id)} index={index}>
@@ -93,7 +102,18 @@ export function TaskCard({
               ))}
             </div>
           )}
+          {projectTitle && <div className="now-kcard-project">{projectTitle}</div>}
           <div className={`now-kcard-title${done ? " done" : ""}`}>{task.title}</div>
+          {note && <div className="now-dept-unassigned">{note}</div>}
+          {cardDepartments.length > 0 && (
+            <div className="now-kcard-depts">
+              {cardDepartments.map((d: any) => (
+                <span key={d.id} className={`now-kcard-dept${cardDepartments.length > 1 && String(d.id) === ownerDepartment ? " owner" : ""}`}>
+                  {d.name}
+                </span>
+              ))}
+            </div>
+          )}
 
           {(loud || checkTotal > 0 || task.commentCount > 0 || task.attachmentCount > 0) && (
             <div className="now-kcard-meta">

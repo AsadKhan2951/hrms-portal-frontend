@@ -923,3 +923,37 @@ button.now-day:hover { box-shadow: inset 0 0 0 1.5px currentColor; }
 }
 .now-kcard-menu-btn:hover { color: var(--foreground); }
 .now-kcard-cover { display: block; width: calc(100% + 28px); max-height: 160px; object-fit: cover; margin: -14px -14px 0; border-radius: 14px 14px 0 0; }
+
+/* The owner's all-projects overview, grouped by department. */
+.now-overview-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.now-overview-dept { display: flex; flex-direction: column; gap: 12px; }
+.now-overview-dept-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; width: 100%; padding: 14px 18px;
+  border: 0; border-radius: 16px; background: var(--card); color: var(--foreground); text-align: left;
+}
+.now-overview-dept-head .grow { flex: 1 1 auto; }
+.now-overview-dept-name { font-family: var(--font-display); font-weight: 700; font-size: 18px; }
+.now-overview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.now-overview-card {
+  display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 0; border-radius: 16px;
+  background: var(--card); color: var(--foreground); text-align: left; min-width: 0;
+}
+.now-overview-card:hover { box-shadow: inset 0 0 0 1.5px var(--foreground); }
+.now-overview-title { font-weight: 700; font-size: 15px; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
+.now-overview-progress { height: 6px; border-radius: 999px; background: var(--secondary); overflow: hidden; }
+.now-overview-progress > span { display: block; height: 100%; border-radius: inherit; background: #4233e0; }
+.now-overview-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; margin-top: 2px; }
+
+/* Department chips on board cards; the owner department is outlined. */
+.now-kcard-project { font-size: 11px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 2px; }
+.now-kcard-depts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.now-kcard-dept { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--secondary); color: var(--foreground); }
+.now-kcard-dept.owner { box-shadow: inset 0 0 0 1.5px #4233e0; }
+
+/* The department board: one department's tasks from every project, by stage. */
+.now-dept-cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(250px, 1fr); gap: 14px; overflow-x: auto; padding-bottom: 8px; }
+.now-dept-col { background: color-mix(in srgb, var(--card) 55%, transparent); border-radius: 18px; padding: 12px; min-height: 160px; display: flex; flex-direction: column; gap: 10px; }
+.now-dept-col.over { box-shadow: inset 0 0 0 2px #4233e0; }
+.now-dept-col-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; }
+.now-dept-col-head .dot { width: 9px; height: 9px; border-radius: 999px; }
+.now-dept-unassigned { font-size: 11px; font-weight: 700; color: var(--now-warn); }

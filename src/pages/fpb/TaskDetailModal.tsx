@@ -24,6 +24,8 @@ import { Markdown } from "./Markdown";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { toggleChecklistLine } from "./markdownParser";
 import { TaskAttachments, attachmentInputId } from "./TaskAttachments";
+import { TaskDepartments } from "./TaskDepartments";
+import { TaskTracking } from "./TaskTracking";
 
 /** Trello's label palette. */
 export const LABEL_COLORS = [
@@ -73,6 +75,10 @@ export function TaskDetailModal({
   const activity = ((data as any)?.activity ?? []) as any[];
   const attachments = ((data as any)?.attachments ?? []) as any[];
   const cardMemberIds = ((data as any)?.memberIds ?? []) as string[];
+  // A department task: handed to departments, whose heads assign it.
+  const departmentTask = ((task?.departmentIds ?? []) as unknown[]).length > 0;
+  const { data: mayCreateProjects = false } = trpc.fpb.canCreateProjects.useQuery(undefined, { enabled: open });
+  const canEditDepartments = orgWide || (projectOwnerId ?? "") === myId || Boolean(mayCreateProjects);
 
   const [title, setTitle] = useState("");
   const [editingDescription, setEditingDescription] = useState(false);
@@ -99,6 +105,8 @@ export function TaskDetailModal({
     utils.fpb.getTask.invalidate({ id: taskId ?? "" });
     utils.fpb.getBoard.invalidate({ projectId });
     utils.fpb.getProjects.invalidate();
+    utils.fpb.getDepartmentBoard.invalidate();
+    utils.fpb.getTaskTracking.invalidate({ taskId: taskId ?? "" });
   };
 
   const updateTask = trpc.fpb.updateTask.useMutation({ onSuccess: refresh, onError });
@@ -283,8 +291,9 @@ export function TaskDetailModal({
                   </div>
                 )}
 
-                {/* Status, priority, assignee */}
-                <div className="grid grid-cols-3 gap-3">
+                {/* Status, priority, assignee (a department task's people are
+                    chosen per department, below) */}
+                <div className={`grid gap-3 ${departmentTask ? "grid-cols-2" : "grid-cols-3"}`}>
                   <div>
                     <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Status</label>
                     <Select
@@ -315,10 +324,13 @@ export function TaskDetailModal({
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
+                  {!departmentTask && (<div>
                     <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Assignee</label>
+                    {/* Only an admin assigns people directly; everyone else
+                        sends the task to departments (below). */}
                     <Select
                       value={task.assignedTo ?? ""}
+                      disabled={!orgWide}
                       onValueChange={v => updateTask.mutate({ id: task.id, assignedTo: v })}
                     >
                       <SelectTrigger className={`h-8 text-xs ${tokens.select}`}>
@@ -338,8 +350,17 @@ export function TaskDetailModal({
                         )}
                       </SelectContent>
                     </Select>
-                  </div>
+                  </div>)}
                 </div>
+
+                <TaskDepartments
+                  task={task}
+                  myId={myId}
+                  orgWide={orgWide}
+                  canEditDepartments={canEditDepartments}
+                  tokens={tokens}
+                  onChanged={refresh}
+                />
 
                 {/* Description */}
                 <section>
@@ -486,6 +507,13 @@ export function TaskDetailModal({
                     </Button>
                   </div>
                 </section>
+
+                <TaskTracking
+                  task={task}
+                  tokens={tokens}
+                  busy={updateTask.isPending}
+                  onToggle={on => updateTask.mutate({ id: task.id, trackingEnabled: on })}
+                />
 
                 {/* Comments and activity */}
                 <section>

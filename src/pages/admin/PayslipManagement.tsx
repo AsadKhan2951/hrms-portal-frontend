@@ -1,8 +1,7 @@
 import AdminLayout from "@/components/AdminLayout";
 import { useState, useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { NowPageHeader } from "@/components/now/NowPage";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -22,23 +21,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  DollarSign,
   Upload,
-  Calendar,
-  User,
   FileText,
   Download,
   Loader2,
   Check,
   Trash2,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Redirect } from "wouter";
 import { isOrgWide, isStaff } from "@/lib/roles";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { trpc } from "@/lib/trpc";
 import { apiUrl, fileUrl } from "@/lib/api";
+import "./adminA.css";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -130,6 +126,22 @@ export default function PayslipManagement() {
       setPendingDeleteId(null);
     }
   };
+
+  // Kept above the redirect so the hook order never changes between renders.
+  const years = useMemo(() => {
+    const current = now.getFullYear();
+    return [current + 1, current, current - 1, current - 2].map(String);
+  }, [now]);
+
+  const latestMonth = useMemo(() => {
+    if (!payslips.length) return "-";
+    const latest = payslips[0];
+    if (latest.month && latest.year) {
+      const date = new Date(latest.year, latest.month - 1, 1);
+      return format(date, "MMMM yyyy");
+    }
+    return "-";
+  }, [payslips]);
 
   if (user && !isOrgWide(user.role)) {
     return <Redirect to="/dashboard" />;
@@ -231,124 +243,113 @@ export default function PayslipManagement() {
     setMarkPaid(true);
   };
 
-  const years = useMemo(() => {
-    const current = now.getFullYear();
-    return [current + 1, current, current - 1, current - 2].map(String);
-  }, [now]);
-
-  const latestMonth = useMemo(() => {
-    if (!payslips.length) return "-";
-    const latest = payslips[0];
-    if (latest.month && latest.year) {
-      const date = new Date(latest.year, latest.month - 1, 1);
-      return format(date, "MMMM yyyy");
-    }
-    return "-";
-  }, [payslips]);
+  const paidCount = payslips.filter((payslip: any) => payslip.paidAt).length;
+  const unpaidCount = payslips.length - paidCount;
 
   return (
     <AdminLayout title="Payslip Management">
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="now-page">
+        <NowPageHeader
+          title="Payslips"
+          subtitle="Upload and manage employee payslips"
+          actions={
+            <div className="now-header-actions">
+              <button type="button" className="now-btn white sm" onClick={() => setBulkUploadDialogOpen(true)}>
+                <Upload className="h-4 w-4" aria-hidden="true" />
+                Bulk Upload
+              </button>
+              <button type="button" className="now-btn lime sm" onClick={() => setUploadDialogOpen(true)}>
+                <Upload className="h-4 w-4" aria-hidden="true" />
+                Upload Payslip
+              </button>
+            </div>
+          }
+        />
+
+        <div className="now-stat-strip">
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <DollarSign className="h-6 w-6" />
-              Payslip Management
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Upload and manage employee payslips
-            </p>
+            <div className="now-stat-label">Total payslips</div>
+            <div className="now-stat-value tabular-nums">{payslipsLoading ? "--" : payslips.length}</div>
+            <div className="now-stat-label">issued so far</div>
           </div>
-
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setBulkUploadDialogOpen(true)}>
-              <Upload className="h-4 w-4 mr-2" />
-              Bulk Upload
-            </Button>
-            <Button onClick={() => setUploadDialogOpen(true)}>
-              <Upload className="h-4 w-4 mr-2" />
-              Upload Payslip
-            </Button>
+          <div style={{ minWidth: 0 }}>
+            <div className="now-stat-label">Latest month</div>
+            <div className="now-stat-value truncate">{latestMonth}</div>
+            <div className="now-stat-label">most recent payslip</div>
+          </div>
+          <div>
+            <div className="now-stat-label">Employees</div>
+            <div className="now-stat-value tabular-nums">{employeesLoading ? "--" : employees.length}</div>
+            <div className="now-stat-label">on the payroll</div>
+          </div>
+          <div>
+            <div className="now-stat-label">Not paid yet</div>
+            <div className={`now-stat-value tabular-nums${!payslipsLoading && unpaidCount ? " now-warn" : ""}`}>
+              {payslipsLoading ? "--" : unpaidCount}
+            </div>
+            <div className="now-stat-label">{payslipsLoading ? "" : `${paidCount} marked as paid`}</div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-2">
-              <div className="p-3 bg-blue-500/10 rounded-lg">
-                <FileText className="h-6 w-6 text-blue-500" />
-              </div>
+        <section className="now-card flush" aria-labelledby="payslips-recent">
+          <div className="now-card-head" style={{ marginBottom: 8 }}>
+            <h2 className="now-h2" id="payslips-recent">Recent Payslips</h2>
+            {!payslipsLoading && payslips.length > 0 ? (
+              <span className="now-pill">{payslips.length}</span>
+            ) : null}
+          </div>
+          {payslipsLoading ? (
+            <div className="now-row now-muted" style={{ borderTop: 0 }}>
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Loading payslips...
+              </span>
             </div>
-            <h3 className="text-2xl font-bold mb-1">{payslipsLoading ? "--" : payslips.length}</h3>
-            <p className="text-sm text-muted-foreground">Total Payslips</p>
-          </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-2">
-              <div className="p-3 bg-green-500/10 rounded-lg">
-                <Calendar className="h-6 w-6 text-green-500" />
-              </div>
+          ) : payslips.length === 0 ? (
+            <div className="now-row now-muted justify-center py-10" style={{ borderTop: 0 }}>
+              No payslips found
             </div>
-            <h3 className="text-2xl font-bold mb-1">{latestMonth}</h3>
-            <p className="text-sm text-muted-foreground">Latest Month</p>
-          </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-2">
-              <div className="p-3 bg-purple-500/10 rounded-lg">
-                <User className="h-6 w-6 text-purple-500" />
-              </div>
-            </div>
-            <h3 className="text-2xl font-bold mb-1">
-              {employeesLoading ? "--" : employees.length}
-            </h3>
-            <p className="text-sm text-muted-foreground">Employees</p>
-          </Card>
-        </div>
-
-        <Card>
-          <div className="p-6">
-            <h2 className="text-lg font-semibold mb-4">Recent Payslips</h2>
-            <div className="space-y-3">
-              {payslipsLoading ? (
-                <div className="text-center text-muted-foreground">Loading payslips...</div>
-              ) : payslips.length === 0 ? (
-                <div className="text-center text-muted-foreground">No payslips found</div>
-              ) : (
-                payslips.map((payslip: any) => (
-                  <div key={payslip.id} className="flex items-center justify-between p-4 bg-muted rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-background rounded-lg">
-                        <FileText className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <p className="font-semibold">{payslip.user?.name || "Employee"}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {payslip.user?.employeeId || "--"} &bull; {payslip.month && payslip.year ? format(new Date(payslip.year, payslip.month - 1, 1), "MMMM yyyy") : "--"}
-                        </p>
+          ) : (
+            payslips.map((payslip: any, index: number) => {
+              const docHref = fileUrl(payslip.documentUrl);
+              return (
+                <div
+                  key={payslip.id}
+                  className="now-row wrap"
+                  style={{ padding: "16px 0", borderTop: index === 0 ? 0 : undefined }}
+                >
+                  <div className="aa-row-main" style={{ alignItems: "center" }}>
+                    <div className="now-icon-btn ground" aria-hidden="true" style={{ cursor: "default" }}>
+                      <FileText className="h-5 w-5" />
+                    </div>
+                    <div className="aa-clamp">
+                      <div className="now-row-title">{payslip.user?.name || "Employee"}</div>
+                      <div className="now-row-sub">
+                        <span className="tabular-nums">{payslip.user?.employeeId || "--"}</span> &bull; {payslip.month && payslip.year ? format(new Date(payslip.year, payslip.month - 1, 1), "MMMM yyyy") : "--"}
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <p className="font-semibold">PKR {Number(payslip.netSalary || 0).toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {payslip.createdAt ? format(new Date(payslip.createdAt), "MMM dd, yyyy") : "--"}
-                        </p>
+                  </div>
+
+                  <div className="aa-row-side" style={{ gap: 12 }}>
+                    <div style={{ minWidth: 110 }}>
+                      <div className="font-bold tabular-nums">PKR {Number(payslip.netSalary || 0).toLocaleString()}</div>
+                      <div className="now-row-sub tabular-nums">
+                        {payslip.createdAt ? format(new Date(payslip.createdAt), "MMM dd, yyyy") : "--"}
                       </div>
+                    </div>
 
-                      {payslip.paidAt ? (
-                        <Badge className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/10">
-                          Paid {format(new Date(payslip.paidAt), "MMM dd")}
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-amber-500 border-amber-500/40">
-                          Pending
-                        </Badge>
-                      )}
+                    {payslip.paidAt ? (
+                      <span className="now-pill aa-ok aa-plain">
+                        Paid {format(new Date(payslip.paidAt), "MMM dd")}
+                      </span>
+                    ) : (
+                      <span className="now-pill warn-soft">Pending</span>
+                    )}
 
-                      <Button
-                        variant={payslip.paidAt ? "ghost" : "default"}
-                        size="sm"
+                    <div className="flex items-center gap-2" style={{ marginLeft: "auto" }}>
+                      <button
+                        type="button"
+                        className={`now-btn sm ${payslip.paidAt ? "text" : "ink"}`}
                         disabled={pendingPaidId === payslip.id}
                         onClick={() => togglePaid(payslip)}
                       >
@@ -358,54 +359,59 @@ export default function PayslipManagement() {
                           "Mark unpaid"
                         ) : (
                           <>
-                            <Check className="h-4 w-4 mr-2" />
+                            <Check className="h-4 w-4" aria-hidden="true" />
                             Mark as paid
                           </>
                         )}
-                      </Button>
+                      </button>
 
-                      {fileUrl(payslip.documentUrl) ? (
-                        <Button variant="outline" size="sm" asChild>
-                          <a
-                            href={fileUrl(payslip.documentUrl) as string}
-                            target="_blank"
-                            rel="noreferrer"
-                            aria-label="Download payslip PDF"
-                          >
-                            <Download className="h-4 w-4" />
-                          </a>
-                        </Button>
-                      ) : (
-                        <Button variant="outline" size="sm" disabled title="No file attached">
+                      {docHref ? (
+                        <a
+                          className="now-icon-btn ground"
+                          href={docHref as string}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label="Download payslip PDF"
+                        >
                           <Download className="h-4 w-4" />
-                        </Button>
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          className="now-icon-btn ground"
+                          disabled
+                          title="No file attached"
+                          aria-label="No file attached"
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
                       )}
 
-                      <Button
-                        variant="outline"
-                        size="sm"
+                      <button
+                        type="button"
+                        className="now-icon-btn ground"
+                        style={{ color: "var(--destructive)" }}
                         onClick={() => deletePayslip(payslip)}
                         disabled={pendingDeleteId === payslip.id}
                         aria-label="Delete payslip"
                         title="Delete this payslip, on the employee's side too"
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                       >
                         {pendingDeleteId === payslip.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <Trash2 className="h-4 w-4" />
                         )}
-                      </Button>
+                      </button>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
-        </Card>
+                </div>
+              );
+            })
+          )}
+        </section>
 
         <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Upload Payslip</DialogTitle>
               <DialogDescription>
@@ -413,11 +419,11 @@ export default function PayslipManagement() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="grid gap-4 py-4">
-              <div className="space-y-2">
+            <div className="grid gap-4 py-2">
+              <div className="aa-field">
                 <Label htmlFor="employee">Employee *</Label>
                 <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                  <SelectTrigger>
+                  <SelectTrigger id="employee">
                     <SelectValue placeholder="Select employee" />
                   </SelectTrigger>
                   <SelectContent>
@@ -441,7 +447,7 @@ export default function PayslipManagement() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="aa-field">
                   <Label htmlFor="month">Month *</Label>
                   <Select value={selectedMonth} onValueChange={setSelectedMonth}>
                     <SelectTrigger id="month">
@@ -457,7 +463,7 @@ export default function PayslipManagement() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="aa-field">
                   <Label htmlFor="year">Year *</Label>
                   <Select value={selectedYear} onValueChange={setSelectedYear}>
                     <SelectTrigger id="year">
@@ -474,7 +480,7 @@ export default function PayslipManagement() {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="aa-field">
                 <Label htmlFor="basicSalary">Basic Salary (PKR) *</Label>
                 <Input
                   id="basicSalary"
@@ -486,8 +492,8 @@ export default function PayslipManagement() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="aa-field">
                   <Label htmlFor="allowances">Allowances (PKR)</Label>
                   <Input
                     id="allowances"
@@ -499,7 +505,7 @@ export default function PayslipManagement() {
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className="aa-field">
                   <Label htmlFor="deductions">Deductions (PKR)</Label>
                   <Input
                     id="deductions"
@@ -512,14 +518,14 @@ export default function PayslipManagement() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between rounded-lg bg-muted px-4 py-3">
-                <span className="text-sm text-muted-foreground">Net Salary</span>
-                <span className="text-lg font-bold">
+              <div className="aa-sub" style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: "14px 18px" }}>
+                <span className="now-small now-muted">Net Salary</span>
+                <span className={`now-lede tabular-nums${netSalaryPreview < 0 ? " now-warn" : ""}`}>
                   PKR {netSalaryPreview.toLocaleString()}
                 </span>
               </div>
 
-              <div className="space-y-2">
+              <div className="aa-field">
                 <Label htmlFor="file">Payslip File (PDF)</Label>
                 <Input
                   id="file"
@@ -527,7 +533,7 @@ export default function PayslipManagement() {
                   accept=".pdf"
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="now-small now-muted">
                   Optional. The employee sees the salary breakdown either way.
                 </p>
               </div>
@@ -542,30 +548,31 @@ export default function PayslipManagement() {
                   Mark as paid
                 </Label>
               </div>
-              <p className="-mt-2 text-xs text-muted-foreground">
+              <p className="-mt-2 now-small now-muted">
                 Unchecked payslips show as &quot;pending&quot; on the employee&apos;s
                 portal.
               </p>
             </div>
 
-            <DialogFooter>
-              <Button
-                variant="outline"
+            <DialogFooter className="gap-2">
+              <button
+                type="button"
+                className="now-btn ground sm"
                 onClick={() => setUploadDialogOpen(false)}
                 disabled={isSaving}
               >
                 Cancel
-              </Button>
-              <Button onClick={handleUploadPayslip} disabled={isSaving}>
+              </button>
+              <button type="button" className="now-btn ink sm" onClick={handleUploadPayslip} disabled={isSaving}>
                 {isSaving ? (
                   <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                     Saving...
                   </>
                 ) : (
                   "Issue Payslip"
                 )}
-              </Button>
+              </button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -579,7 +586,7 @@ export default function PayslipManagement() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="py-4 text-sm text-muted-foreground space-y-2">
+            <div className="aa-sub now-body-2">
               <p>
                 Bulk upload needs server-side ZIP extraction, which is not
                 implemented yet. Nothing was being saved before, so the button
@@ -588,14 +595,14 @@ export default function PayslipManagement() {
               </p>
               <p>
                 For now, issue payslips one employee at a time with{" "}
-                <span className="font-medium text-foreground">Upload Payslip</span>.
+                <span className="font-semibold text-foreground">Upload Payslip</span>.
               </p>
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setBulkUploadDialogOpen(false)}>
+              <button type="button" className="now-btn ground sm" onClick={() => setBulkUploadDialogOpen(false)}>
                 Close
-              </Button>
+              </button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

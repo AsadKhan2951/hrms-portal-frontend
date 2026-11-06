@@ -14,7 +14,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Avatar, PROJECT_TYPES, formatDate, getTypeInfo } from "@/pages/fpb/shared";
+import { Avatar, ScopePicker, formatDate, scopeLabel } from "@/pages/fpb/shared";
 
 /** A project's dueDate (ISO or Date) as the YYYY-MM-DD an <input type=date> wants. */
 function toDateInput(value: unknown): string {
@@ -67,7 +67,7 @@ export function ProjectSettingsModal({
   // project is opened; status and priority still save on change, the rest
   // through the Save button so a half-typed name is not written on every key.
   const [form, setForm] = useState({
-    title: "", description: "", projectType: "other", dueDate: "",
+    title: "", description: "", scopes: [] as string[], startDate: "", dueDate: "",
   });
   useEffect(() => {
     if (!project) return;
@@ -75,7 +75,8 @@ export function ProjectSettingsModal({
     setForm({
       title: p.title ?? "",
       description: p.description ?? "",
-      projectType: p.projectType ?? "other",
+      scopes: Array.isArray(p.scopes) ? p.scopes : [],
+      startDate: toDateInput(p.startDate),
       dueDate: toDateInput(p.dueDate),
     });
   }, [(project as any)?.id]);
@@ -84,7 +85,8 @@ export function ProjectSettingsModal({
     Boolean(project) &&
     (form.title.trim() !== ((project as any).title ?? "") ||
       form.description !== ((project as any).description ?? "") ||
-      form.projectType !== ((project as any).projectType ?? "other") ||
+      [...form.scopes].sort().join() !== [...((project as any).scopes ?? [])].sort().join() ||
+      form.startDate !== toDateInput((project as any).startDate) ||
       form.dueDate !== toDateInput((project as any).dueDate));
 
   const saveDetails = () => {
@@ -92,12 +94,21 @@ export function ProjectSettingsModal({
       toast.error("A project needs a name");
       return;
     }
+    if (form.scopes.length === 0) {
+      toast.error("Pick at least one scope");
+      return;
+    }
+    if (form.startDate && form.dueDate && form.startDate > form.dueDate) {
+      toast.error("The start date is after the due date");
+      return;
+    }
     updateProject.mutate(
       {
         id: projectId,
         title: form.title.trim(),
         description: form.description,
-        projectType: form.projectType as any,
+        scopes: form.scopes as any,
+        startDate: form.startDate ? new Date(`${form.startDate}T12:00:00`) : null,
         dueDate: form.dueDate ? new Date(`${form.dueDate}T12:00:00`) : null,
       },
       { onSuccess: () => toast.success("Project updated") }
@@ -120,7 +131,6 @@ export function ProjectSettingsModal({
     updateMembers.mutate({ projectId, memberIds: next });
   };
 
-  const typeInfo = getTypeInfo((project as any)?.projectType ?? "other");
 
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
@@ -134,7 +144,8 @@ export function ProjectSettingsModal({
             <DialogHeader>
               <DialogTitle className="font-semibold">{(project as any).title}</DialogTitle>
               <DialogDescription className={tokens.textMuted}>
-                <span className={typeInfo.color}>{typeInfo.short}</span>
+                {scopeLabel((project as any).scopes)}
+                {(project as any).startDate && ` · starts ${formatDate((project as any).startDate)}`}
                 {(project as any).dueDate && ` · due ${formatDate((project as any).dueDate)}`}
               </DialogDescription>
             </DialogHeader>
@@ -199,28 +210,27 @@ export function ProjectSettingsModal({
                   />
                 </div>
 
+                <div>
+                  <Label className={`text-xs mb-1.5 block ${tokens.textMuted}`}>Scope</Label>
+                  <ScopePicker value={form.scopes} onChange={next => setForm(f => ({ ...f, scopes: next }))} />
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label className={`text-xs mb-1 block ${tokens.textMuted}`}>Type</Label>
-                    <Select
-                      value={form.projectType}
-                      onValueChange={v => setForm(f => ({ ...f, projectType: v }))}
-                    >
-                      <SelectTrigger className={`h-8 text-xs ${tokens.select}`}><SelectValue /></SelectTrigger>
-                      <SelectContent className={tokens.selectContent}>
-                        {PROJECT_TYPES.map(pt => (
-                          <SelectItem key={pt.value} value={pt.value} className="text-xs">
-                            <span className={`flex items-center gap-1.5 ${pt.color}`}>{pt.icon} {pt.short}</span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label className={`text-xs mb-1 block ${tokens.textMuted}`}>Start date</Label>
+                    <Input
+                      type="date"
+                      value={form.startDate}
+                      onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
+                      className={`h-8 text-xs ${tokens.input}`}
+                    />
                   </div>
                   <div>
                     <Label className={`text-xs mb-1 block ${tokens.textMuted}`}>Due date</Label>
                     <Input
                       type="date"
                       value={form.dueDate}
+                      min={form.startDate || undefined}
                       onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
                       className={`h-8 text-xs ${tokens.input}`}
                     />

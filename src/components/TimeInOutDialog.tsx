@@ -25,6 +25,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Clock, Loader2, Coffee, Plus, X, Paperclip, AlertTriangle, CheckCircle2, Calendar, Timer } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { TodayTasks, type TodaySummary } from "@/components/TodayTasks";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
@@ -45,21 +46,8 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
   const [notes, setNotes] = useState("");
   const [currentTime, setCurrentTime] = useState(new Date());
   const [elapsedTime, setElapsedTime] = useState("");
-  const [addedTasks, setAddedTasks] = useState<Array<{
-    id?: string;
-    projectId: string;
-    projectName?: string;
-    title: string;
-    description?: string;
-    status: "todo" | "in_progress" | "completed" | "blocked";
-    source: "manual";
-  }>>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskDescription, setTaskDescription] = useState("");
-  const [taskStatus, setTaskStatus] = useState<"todo" | "in_progress" | "completed" | "blocked">("completed");
-  const [taskCompletionDate, setTaskCompletionDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [taskIsOngoing, setTaskIsOngoing] = useState(false);
+  // Today's board work, as work-log lines, from <TodayTasks>.
+  const [today, setToday] = useState<TodaySummary>({ doneLines: [], progressLines: [] });
   const [attachments, setAttachments] = useState<File[]>([]);
   const [showTaskAlert, setShowTaskAlert] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -72,47 +60,6 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
 
   const { data: breakLogs } = trpc.timeTracking.getBreakLogs.useQuery(undefined, {
     enabled: !!activeEntry,
-  });
-
-  const { data: projects = [] } = trpc.projects.getMyProjects.useQuery();
-  const { data: completedTasksToday = [] } = trpc.timeTracking.getCompletedTasksForToday.useQuery(undefined, {
-    enabled: !!activeEntry,
-  });
-
-  useEffect(() => {
-    if (!selectedProjectId && projects.length > 0) {
-      setSelectedProjectId(String(projects[0].id));
-    }
-  }, [projects, selectedProjectId]);
-
-  const createTaskMutation = trpc.projects.createTask.useMutation({
-    onSuccess: async (data) => {
-      if (data?.task?.id) {
-        const project = projects.find((p: any) => String(p.id) === String(selectedProjectId));
-        setAddedTasks((prev) => [
-          ...prev,
-          {
-            id: String(data.task.id),
-            projectId: selectedProjectId,
-            projectName: project?.name,
-            title: taskTitle.trim(),
-            description: taskDescription.trim() || undefined,
-            status: taskStatus,
-            source: "manual",
-          },
-        ]);
-      }
-      utils.timeTracking.getCompletedTasksForToday.invalidate();
-      setTaskTitle("");
-      setTaskDescription("");
-      setTaskStatus("completed");
-      setTaskCompletionDate(format(new Date(), "yyyy-MM-dd"));
-      setTaskIsOngoing(false);
-      toast.success("Task added successfully");
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to add task");
-    },
   });
 
   const clockInMutation = trpc.timeTracking.clockIn.useMutation({
@@ -133,7 +80,6 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
       utils.timeTracking.getAttendance.invalidate();
       onOpenChange(false);
       setNotes("");
-      setAddedTasks([]);
       setAttachments([]);
     },
     onError: (error) => {
@@ -191,78 +137,31 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
     );
   };
 
+  /** The work log saved with the clock-out: today's board work, then the notes. */
+  const workLog = () => {
+    const lines = [...today.doneLines, ...today.progressLines];
+    const log = lines.join("\n");
+    return notes?.trim() ? `${log}${log ? "\n\n" : ""}Notes: ${notes.trim()}` : log || undefined;
+  };
+
   const handleClockOut = () => {
-    const totalCompleted = allTasks.filter((task) => task.status === "completed").length;
-    if (totalCompleted === 0) {
+    // Nothing done or moved on the board today: ask before leaving it empty.
+    if (today.doneLines.length === 0 && today.progressLines.length === 0) {
       setShowTaskAlert(true);
       return;
     }
-
-    const workLog = allTasks
-      .filter((task) => task.status === "completed")
-      .map((task) => {
-        const projectLabel = task.projectName || "Project";
-        const description = task.description ? ` - ${task.description}` : "";
-        return `[${projectLabel}] ${task.title}${description} (${task.status})`;
-      })
-      .join("\n");
-    const combinedNotes = notes?.trim()
-      ? `${workLog}${workLog ? "\n\n" : ""}Notes: ${notes.trim()}`
-      : workLog || undefined;
-
-    clockOutMutation.mutate({ notes: combinedNotes || undefined });
+    clockOutMutation.mutate({ notes: workLog() });
   };
 
   const handleForceClockOut = () => {
     setShowTaskAlert(false);
-    const workLog = allTasks
-      .filter((task) => task.status === "completed")
-      .map((task) => {
-        const projectLabel = task.projectName || "Project";
-        const description = task.description ? ` - ${task.description}` : "";
-        return `[${projectLabel}] ${task.title}${description} (${task.status})`;
-      })
-      .join("\n");
-    const combinedNotes = notes?.trim()
-      ? `${workLog}${workLog ? "\n\n" : ""}Notes: ${notes.trim()}`
-      : workLog || undefined;
-    clockOutMutation.mutate({ notes: combinedNotes });
+    clockOutMutation.mutate({ notes: workLog() });
   };
 
-  const handleGoToProjects = () => {
+  const handleGoToBoard = () => {
     setShowTaskAlert(false);
     onOpenChange(false);
-    setLocation("/projects");
-  };
-
-  const addTask = () => {
-    if (!selectedProjectId) {
-      toast.error("Please select a project");
-      return;
-    }
-    if (!taskTitle.trim()) {
-      toast.error("Please enter a task title");
-      return;
-    }
-    if (!taskIsOngoing && !taskCompletionDate) {
-      toast.error("Please select a completion date or mark as ongoing");
-      return;
-    }
-
-    createTaskMutation.mutate({
-      projectId: selectedProjectId,
-      title: taskTitle.trim(),
-      description: taskDescription.trim() || undefined,
-      status: taskStatus,
-      timeEntryId: activeEntry?.id,
-      completionDate: taskIsOngoing
-        ? undefined
-        : new Date(`${taskCompletionDate}T00:00:00`),
-    });
-  };
-
-  const removeTask = (index: number) => {
-    setAddedTasks(addedTasks.filter((_, i) => i !== index));
+    setLocation("/board");
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -292,31 +191,6 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
   const netWorkHours = totalHours - (totalBreakMinutes / 60);
   const isMinimumMet = totalHours >= 6.5;
   const isTargetMet = totalHours >= 8;
-
-  const normalizedCompletedTasks = useMemo(() => {
-    return completedTasksToday.map((task: any) => ({
-      id: String(task.id),
-      projectId: String(task.project?.id || task.projectId || ""),
-      projectName: task.project?.name,
-      title: task.title,
-      description: task.description,
-      status: task.status as "todo" | "in_progress" | "completed" | "blocked",
-      source: "project" as const,
-    }));
-  }, [completedTasksToday]);
-
-  const allTasks = useMemo(() => {
-    const map = new Map<string, typeof addedTasks[number]>();
-    [...normalizedCompletedTasks, ...addedTasks].forEach((task) => {
-      const key = task.id || `${task.projectId}-${task.title}-${task.status}-${task.description ?? ""}`;
-      if (!map.has(key)) {
-        map.set(key, task);
-      }
-    });
-    return Array.from(map.values());
-  }, [normalizedCompletedTasks, addedTasks]);
-
-  const completedCount = allTasks.filter((task) => task.status === "completed").length;
 
   const getTimeColor = () => {
     if (totalHours >= 8) return "text-green-500";
@@ -472,155 +346,10 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
                   </div>
                 </Card>
 
-                {/* Tasks Completed Today */}
+                {/* Today's work, from the board */}
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-base">
-                      Tasks Completed Today <span className="text-muted-foreground">({completedCount} tasks)</span>
-                    </Label>
-                  </div>
-
-                  {normalizedCompletedTasks.length > 0 && (
-                    <div className="bg-green-500/10 border border-green-500/20 p-3 rounded-lg text-sm">
-                      <div className="font-medium text-green-500 mb-1">
-                        {normalizedCompletedTasks.length} Task{normalizedCompletedTasks.length > 1 ? "s" : ""} Already Added Today
-                      </div>
-                      <div className="text-muted-foreground">
-                        Your tasks are already recorded for today.
-                      </div>
-                    </div>
-                  )}
-
-                  {completedCount === 0 && (
-                    <div className="space-y-3">
-                      <div className="space-y-2">
-                        <Label>Select Project *</Label>
-                        <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select project" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {projects.length === 0 ? (
-                              <SelectItem value="none" disabled>
-                                No projects assigned
-                              </SelectItem>
-                            ) : (
-                              projects.map((project: any) => (
-                                <SelectItem key={project.id} value={String(project.id)}>
-                                  {project.name}
-                                </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Task Title *</Label>
-                        <Input
-                          placeholder="e.g., Implemented user authentication"
-                          value={taskTitle}
-                          onChange={(e) => setTaskTitle(e.target.value)}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Description (Optional)</Label>
-                        <Textarea
-                          placeholder="Add details about what you accomplished..."
-                          value={taskDescription}
-                          onChange={(e) => setTaskDescription(e.target.value)}
-                          rows={3}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Status *</Label>
-                        <Select value={taskStatus} onValueChange={(value) => setTaskStatus(value as any)}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="completed">Completed</SelectItem>
-                            <SelectItem value="in_progress">In Progress</SelectItem>
-                            <SelectItem value="todo">To Do</SelectItem>
-                            <SelectItem value="blocked">Blocked</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Completion Date</Label>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="date"
-                            value={taskCompletionDate}
-                            onChange={(e) => setTaskCompletionDate(e.target.value)}
-                            disabled={taskIsOngoing}
-                          />
-                          <label className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
-                            <Checkbox
-                              checked={taskIsOngoing}
-                              onCheckedChange={(value) => setTaskIsOngoing(Boolean(value))}
-                            />
-                            Ongoing
-                          </label>
-                        </div>
-                      </div>
-
-                      <Button
-                        type="button"
-                        onClick={addTask}
-                        disabled={createTaskMutation.isPending}
-                        className="w-full"
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        {createTaskMutation.isPending ? "Adding..." : "Add Task"}
-                      </Button>
-                    </div>
-                  )}
-
-                  {allTasks.length > 0 && (
-                    <div className="space-y-2">
-                      {allTasks.map((task, index) => (
-                        <div key={`${task.id || index}`} className="flex items-start gap-3 bg-muted/50 p-3 rounded-lg">
-                          <div className="flex-1">
-                            <div className="text-sm font-medium">
-                              {task.projectName || "Project"} • {task.title}
-                            </div>
-                            {task.description && (
-                              <div className="text-xs text-muted-foreground mt-1">
-                                {task.description}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary capitalize">
-                              {task.status.replace("_", " ")}
-                            </span>
-                            {task.source === "manual" && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                onClick={() => removeTask(index)}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {completedCount === 0 && (
-                    <div className="text-sm text-muted-foreground bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-lg flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                      <span>Please add at least one completed task before clocking out</span>
-                    </div>
-                  )}
+                  <Label className="text-base">Today's work</Label>
+                  <TodayTasks onSummary={setToday} />
 
                   <div className="space-y-2">
                     <Label htmlFor="file-upload" className="cursor-pointer">
@@ -712,19 +441,19 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-yellow-500" />
-              No Tasks Added
+              No work logged today
             </AlertDialogTitle>
             <AlertDialogDescription>
-              You haven't added any tasks for today. It's important to log your work activities before clocking out.
-              Would you like to go to the Projects page to add tasks, or clock out anyway?
+              Nothing was finished or updated on the board today. Log what you worked on (here or on the
+              board) before clocking out, or clock out anyway.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={handleForceClockOut}>
               Clock Out Anyway
             </AlertDialogCancel>
-            <AlertDialogAction onClick={handleGoToProjects}>
-              Go to Projects
+            <AlertDialogAction onClick={handleGoToBoard}>
+              Go to the board
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import LayoutWrapper from "@/components/LayoutWrapper";
 import AdminLayout from "@/components/AdminLayout";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -22,6 +20,8 @@ import { trpc } from "@/lib/trpc";
 import { isOrgWide, isStaff } from "@/lib/roles";
 import { format, subDays } from "date-fns";
 import { toast } from "sonner";
+import { NowPageHeader } from "@/components/now/NowPage";
+import "./admin/adminB.css";
 
 export default function Reports() {
   const { user } = useAuth();
@@ -80,23 +80,28 @@ export default function Reports() {
         { enabled: rangeValid }
       );
 
-  const projectsQuery = isAdmin
-    ? trpc.admin.getEmployeeProjects.useQuery(
-        { employeeId: targetEmployeeId },
-        { enabled: Boolean(targetEmployeeId) }
-      )
-    : trpc.projects.getMyProjects.useQuery();
-
-  const tasksQuery = isAdmin
-    ? trpc.admin.getEmployeeTasks.useQuery(
-        { employeeId: targetEmployeeId },
-        { enabled: Boolean(targetEmployeeId) }
-      )
-    : trpc.projects.getMyTasks.useQuery();
+  // Projects and tasks from the board: the chosen employee's for an admin,
+  // otherwise the viewer's own.
+  const workQuery = trpc.fpb.getPersonWork.useQuery(
+    isAdmin ? { employeeId: targetEmployeeId || undefined } : undefined,
+    { enabled: !isAdmin || Boolean(targetEmployeeId) }
+  );
 
   const attendanceEntries = attendanceQuery.data || [];
-  const projects = projectsQuery.data || [];
-  const tasks = tasksQuery.data || [];
+  const projects = useMemo(
+    () => (((workQuery.data as any)?.projects ?? []) as any[]).map(p => ({ ...p, name: p.title })),
+    [workQuery.data]
+  );
+  const tasks = useMemo(
+    () =>
+      (((workQuery.data as any)?.tasks ?? []) as any[]).map(t => ({
+        ...t,
+        status: t.done ? "completed" : t.status,
+        completionDate: t.dueDate,
+        project: { id: t.projectId, name: t.projectTitle },
+      })),
+    [workQuery.data]
+  );
 
   const attendanceMetrics = useMemo(() => {
     const uniqueDays = new Set<string>();
@@ -128,7 +133,7 @@ export default function Reports() {
 
   const projectMetrics = useMemo(() => {
     const active = projects.filter((p: any) => p.status === "active").length;
-    const archived = projects.filter((p: any) => p.status === "completed" || p.status === "cancelled").length;
+    const archived = projects.filter((p: any) => p.status === "completed" || p.status === "archived").length;
     return {
       total: projects.length,
       active,
@@ -145,188 +150,201 @@ export default function Reports() {
     };
   }, [tasks]);
 
-  const content = (
-    <div className="space-y-6">
-      <Card className="p-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold">Employee Reports</h2>
-            <p className="text-sm text-muted-foreground">
-              Attendance and project activity for the selected time range
-            </p>
-          </div>
+  const statusPill = (status: string) =>
+    status === "completed" || status === "done"
+      ? "now-pill nb-ok-soft"
+      : status === "active" || status === "in_progress"
+        ? "now-pill nb-info-soft"
+        : status === "cancelled" || status === "early_out"
+          ? "now-pill risk"
+          : "now-pill";
 
-          <div className="flex flex-col md:flex-row gap-3">
-            {isAdmin && (
-              <div className="min-w-[220px]">
-                <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.length === 0 ? (
-                      <SelectItem value="none" disabled>
-                        No employees available
+  const content = (
+    <div className="now-page">
+      <NowPageHeader
+        title="Employee reports"
+        subtitle="Attendance and project activity for the selected time range"
+      />
+
+      <section className="now-card" aria-label="Report filters">
+        <div className="flex flex-wrap items-end gap-4">
+          {isAdmin && (
+            <div className="min-w-0" style={{ flex: "1 1 240px", maxWidth: 360 }}>
+              <label className="nb-label">Employee</label>
+              <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees.length === 0 ? (
+                    <SelectItem value="none" disabled>
+                      No employees available
+                    </SelectItem>
+                  ) : (
+                    employees.map((emp: any) => (
+                      <SelectItem key={emp.id} value={String(emp.id)}>
+                        {emp.name} ({emp.employeeId || "ID"})
                       </SelectItem>
-                    ) : (
-                      employees.map((emp: any) => (
-                        <SelectItem key={emp.id} value={String(emp.id)}>
-                          {emp.name} ({emp.employeeId || "ID"})
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-              <span className="text-xs text-muted-foreground">to</span>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div className="min-w-0" style={{ flex: "2 1 300px" }}>
+            <label className="nb-label flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5" aria-hidden="true" /> Date range
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="date"
+                aria-label="Start date"
+                className="min-w-0"
+                style={{ flex: "1 1 140px" }}
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+              <span className="now-small now-muted">to</span>
+              <Input
+                type="date"
+                aria-label="End date"
+                className="min-w-0"
+                style={{ flex: "1 1 140px" }}
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
             </div>
           </div>
         </div>
-      </Card>
+        {!rangeValid && startDate && endDate && (
+          <p className="now-small now-warn">End date must be after start date.</p>
+        )}
+      </section>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-            <Timer className="h-4 w-4 text-blue-500" />
-            Attendance Summary
+      <div className="now-stat-strip">
+        <div>
+          <div className="now-stat-label flex items-center gap-1.5">
+            <Timer className="h-3.5 w-3.5" aria-hidden="true" /> Attendance Summary
           </div>
-          <div className="text-2xl font-bold">{attendanceMetrics.totalHours} hrs</div>
-          <div className="text-xs text-muted-foreground mt-2">
-            Days present: {attendanceMetrics.daysPresent}
-          </div>
-          <div className="text-xs text-muted-foreground">
+          <div className="now-stat-value">{attendanceMetrics.totalHours} hrs</div>
+          <div className="now-stat-label">Days present: {attendanceMetrics.daysPresent}</div>
+          <div className={`now-stat-label${attendanceMetrics.missingClockouts > 0 ? " now-warn" : ""}`}>
             Missing clock outs: {attendanceMetrics.missingClockouts}
           </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-            <FolderKanban className="h-4 w-4 text-purple-500" />
-            Projects
+        </div>
+        <div>
+          <div className="now-stat-label flex items-center gap-1.5">
+            <FolderKanban className="h-3.5 w-3.5" aria-hidden="true" /> Projects
           </div>
-          <div className="text-2xl font-bold">{projectMetrics.total}</div>
-          <div className="text-xs text-muted-foreground mt-2">
-            Active: {projectMetrics.active}
+          <div className="now-stat-value">{projectMetrics.total}</div>
+          <div className="now-stat-label">Active: {projectMetrics.active}</div>
+          <div className="now-stat-label">Archived: {projectMetrics.archived}</div>
+        </div>
+        <div>
+          <div className="now-stat-label flex items-center gap-1.5">
+            <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" /> Tasks
           </div>
-          <div className="text-xs text-muted-foreground">
-            Archived: {projectMetrics.archived}
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-            <ClipboardList className="h-4 w-4 text-green-500" />
-            Tasks
-          </div>
-          <div className="text-2xl font-bold">{taskMetrics.total}</div>
-          <div className="text-xs text-muted-foreground mt-2">
-            Completed: {taskMetrics.completed}
-          </div>
-          <div className="text-xs text-muted-foreground">Pending: {taskMetrics.pending}</div>
-        </Card>
+          <div className="now-stat-value">{taskMetrics.total}</div>
+          <div className="now-stat-label">Completed: {taskMetrics.completed}</div>
+          <div className="now-stat-label">Pending: {taskMetrics.pending}</div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-sm">Attendance Entries</h3>
-            <Badge variant="secondary" className="text-xs">{attendanceEntries.length}</Badge>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <section className="now-card flush min-w-0" aria-label="Attendance entries">
+          <div className="now-card-head pb-2">
+            <h3 className="now-h2">Attendance Entries</h3>
+            <span className="now-pill">{attendanceEntries.length}</span>
           </div>
           {attendanceEntries.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No attendance entries</div>
+            <div className="now-row now-muted">No attendance entries</div>
           ) : (
-            <div className="space-y-2 max-h-64 overflow-y-auto">
+            <div className="nb-scroll">
               {attendanceEntries.map((entry: any) => (
-                <div key={entry.id} className="p-3 rounded-lg border bg-muted/20">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium">
+                <div key={entry.id} className="now-row tight">
+                  <div className="min-w-0">
+                    <div className="now-row-title">
                       {entry.timeIn ? format(new Date(entry.timeIn), "MMM dd, yyyy") : "--"}
                     </div>
-                    <Badge variant="outline" className="text-xs">
-                      {entry.status || "unknown"}
-                    </Badge>
+                    <div className={`now-row-sub tabular-nums${entry.autoClockedOut ? " now-warn" : ""}`}>
+                      {entry.timeIn ? format(new Date(entry.timeIn), "HH:mm") : "--"} -
+                      {entry.autoClockedOut
+                        ? " missed clock-out"
+                        : entry.timeOut ? ` ${format(new Date(entry.timeOut), "HH:mm")}` : " --"}
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {entry.timeIn ? format(new Date(entry.timeIn), "HH:mm") : "--"} -
-                    {entry.autoClockedOut
-                      ? " missed clock-out"
-                      : entry.timeOut ? ` ${format(new Date(entry.timeOut), "HH:mm")}` : " --"}
-                  </div>
+                  <span className={statusPill(entry.status || "unknown")}>
+                    {entry.status || "unknown"}
+                  </span>
                 </div>
               ))}
             </div>
           )}
-        </Card>
+        </section>
 
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-sm">Projects</h3>
-            <Badge variant="secondary" className="text-xs">{projects.length}</Badge>
+        <section className="now-card flush min-w-0" aria-label="Projects">
+          <div className="now-card-head pb-2">
+            <h3 className="now-h2">Projects</h3>
+            <span className="now-pill">{projects.length}</span>
           </div>
           {projects.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No projects assigned</div>
+            <div className="now-row now-muted">No projects assigned</div>
           ) : (
-            <div className="space-y-2 max-h-64 overflow-y-auto">
+            <div className="nb-scroll">
               {projects.map((project: any) => (
-                <div key={project.id} className="p-3 rounded-lg border bg-muted/20">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium">{project.name}</div>
-                    <Badge variant="outline" className="text-xs">
-                      {project.status || "active"}
-                    </Badge>
+                <div key={project.id} className="now-row tight">
+                  <div className="min-w-0">
+                    <div className="now-row-title truncate">{project.name}</div>
+                    <div className="now-row-sub">
+                      {project.startDate || project.dueDate ? (
+                        <span>
+                          {project.startDate
+                            ? format(new Date(project.startDate), "MMM dd, yyyy")
+                            : "--"} -
+                          {project.dueDate
+                            ? ` ${format(new Date(project.dueDate), "MMM dd, yyyy")}`
+                            : " --"}
+                        </span>
+                      ) : (
+                        <span>No timeline set</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {project.startDate || project.endDate ? (
-                      <span>
-                        {project.startDate
-                          ? format(new Date(project.startDate), "MMM dd, yyyy")
-                          : "--"} -
-                        {project.endDate
-                          ? ` ${format(new Date(project.endDate), "MMM dd, yyyy")}`
-                          : " --"}
-                      </span>
-                    ) : (
-                      <span>No timeline set</span>
-                    )}
-                  </div>
+                  <span className={statusPill(project.status || "active")}>
+                    {project.status || "active"}
+                  </span>
                 </div>
               ))}
             </div>
           )}
-        </Card>
+        </section>
       </div>
 
-      <Card className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-sm">Tasks</h3>
-          <Badge variant="secondary" className="text-xs">{tasks.length}</Badge>
+      <section className="now-card flush" aria-label="Tasks">
+        <div className="now-card-head pb-2">
+          <h3 className="now-h2">Tasks</h3>
+          <span className="now-pill">{tasks.length}</span>
         </div>
         {tasks.length === 0 ? (
-          <div className="text-sm text-muted-foreground">No tasks assigned</div>
+          <div className="now-row now-muted">No tasks assigned</div>
         ) : (
-          <div className="space-y-2 max-h-72 overflow-y-auto">
+          <div className="nb-scroll tall">
             {tasks.map((task: any) => (
-              <div key={task.id} className="p-3 rounded-lg border bg-muted/20">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">{task.title}</div>
-                  <Badge variant="outline" className="text-xs">{task.status || "todo"}</Badge>
+              <div key={task.id} className="now-row tight">
+                <div className="min-w-0">
+                  <div className="now-row-title">{task.title}</div>
+                  <div className="now-row-sub">
+                    Project: {task.project?.name || "Unknown"}
+                    {" · "}
+                    Timeline: {task.completionDate ? format(new Date(task.completionDate), "MMM dd, yyyy") : "Ongoing"}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  Project: {task.project?.name || "Unknown"}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Timeline: {task.completionDate ? format(new Date(task.completionDate), "MMM dd, yyyy") : "Ongoing"}
-                </div>
+                <span className={statusPill(task.status || "todo")}>{(task.status || "todo").replace(/_/g, " ")}</span>
               </div>
             ))}
           </div>
         )}
-      </Card>
+      </section>
     </div>
   );
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Check, FileText, Loader2, Paperclip, X } from "lucide-react";
 
@@ -17,7 +17,8 @@ import { MAX_ATTACHMENT_BYTES, formatBytes, uploadTaskFile } from "./TaskAttachm
 
 /**
  * Creates a card, with everything a card can carry from the start: a formatted
- * description with @mentions, labels, the people on it, a due date and files.
+ * description with @mentions, labels, the departments it goes to, a due date
+ * and files. The project manager hands it to departments; their heads assign it.
  */
 export function NewTaskModal({
   open, onClose, projectId, subprojectId, columnId, projectTitle, subprojectName,
@@ -37,23 +38,20 @@ export function NewTaskModal({
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
   const [dueDate, setDueDate] = useState("");
-  const [assignedTo, setAssignedTo] = useState("");
-  const [memberIds, setMemberIds] = useState<string[]>([]);
+  // The departments the task goes to; their heads assign it to their people.
+  const [departmentIds, setDepartmentIds] = useState<string[]>([]);
+  const [ownerDepartmentId, setOwnerDepartmentId] = useState("");
   const [labelIds, setLabelIds] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
-  const [targetColumn, setTargetColumn] = useState<string>(columnId ?? "");
   const [uploading, setUploading] = useState(false);
 
-  const { data: board } = trpc.fpb.getBoard.useQuery(
-    { projectId },
-    { enabled: open && Boolean(projectId) }
-  );
-  const columns = (board?.columns ?? []) as any[];
+  const { data: departments = [] } = trpc.fpb.getDepartments.useQuery(undefined, { enabled: open });
+  const chosen = (departments as any[]).filter(d => departmentIds.includes(d.id));
+  const owner = chosen.find(d => d.id === ownerDepartmentId) ?? chosen[0] ?? null;
 
-  // Follow whichever column's "+" was clicked, each time the dialog opens.
-  useEffect(() => {
-    if (open && columnId) setTargetColumn(columnId);
-  }, [open, columnId]);
+  // Tasks go to departments and start in their backlog, whichever column's
+  // "+" opened this form.
+  void columnId;
 
   // The project's people: assignable, can be put on the card, can be @mentioned.
   const people = useMemo(() => {
@@ -63,7 +61,7 @@ export function NewTaskModal({
 
   const reset = () => {
     setTitle(""); setDescription(""); setPriority("medium");
-    setDueDate(""); setAssignedTo(""); setMemberIds([]); setLabelIds([]); setFiles([]);
+    setDueDate(""); setDepartmentIds([]); setOwnerDepartmentId(""); setLabelIds([]); setFiles([]);
   };
   const close = () => { reset(); onClose(); };
 
@@ -91,18 +89,21 @@ export function NewTaskModal({
 
   const submit = async () => {
     if (!title.trim() || create.isPending || uploading) return;
+    if (departmentIds.length === 0) {
+      toast.error("Choose at least one department");
+      return;
+    }
     let task: any;
     try {
       task = await create.mutateAsync({
         projectId,
         subprojectId: subprojectId || undefined,
-        columnId: targetColumn || undefined,
         title: title.trim(),
         description: description.trim() || undefined,
         priority,
         dueDate: dueDate ? new Date(`${dueDate}T12:00:00`) : undefined,
-        assignedTo: assignedTo || undefined,
-        memberIds: [...new Set([...(assignedTo ? [assignedTo] : []), ...memberIds])],
+        departmentIds,
+        ownerDepartmentId: owner?.id,
         labelIds: labelIds.length ? labelIds : undefined,
       });
     } catch {
@@ -125,13 +126,10 @@ export function NewTaskModal({
     }
 
     refresh();
-    const who = assignedTo ? users.find(u => u.id === assignedTo)?.name : null;
     toast.success(
       failed > 0
         ? "Task created, but some files did not upload. Open the card to try again."
-        : who
-          ? `Task created. ${who} has been notified.`
-          : "Task created"
+        : `Task sent to ${chosen.map(d => d.name).join(", ")}. Their heads have been notified.`
     );
     close();
   };
@@ -176,47 +174,73 @@ export function NewTaskModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={`text-xs mb-1.5 block ${tokens.textMuted}`}>Departments * (who does this)</label>
+            {(departments as any[]).length === 0 ? (
+              <p className="text-xs text-amber-500">No departments yet. An admin adds them under Organisation.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Departments">
+                {(departments as any[]).map(d => {
+                  const on = departmentIds.includes(d.id);
+                  return (
+                    <button
+                      key={d.id}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => setDepartmentIds(list => toggle(list, d.id))}
+                      className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                        on ? "bg-[#4233e0] border-[#4233e0] text-white" : `${tokens.border} ${tokens.textSecondary}`
+                      }`}
+                    >
+                      {on && <Check className="w-3 h-3" />} {d.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {chosen.length > 1 && (
             <div>
-              <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Column</label>
-              <Select value={targetColumn} onValueChange={setTargetColumn}>
-                <SelectTrigger className={tokens.select}>
-                  <SelectValue placeholder="First column" />
-                </SelectTrigger>
+              <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Owner department (has the final say)</label>
+              <Select value={owner?.id ?? ""} onValueChange={setOwnerDepartmentId}>
+                <SelectTrigger className={tokens.select}><SelectValue /></SelectTrigger>
                 <SelectContent className={tokens.selectContent}>
-                  {columns.map(c => (
-                    <SelectItem key={c.id} value={c.id}>
-                      <span className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
-                        {c.name}
-                      </span>
-                    </SelectItem>
+                  {chosen.map(d => (
+                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+          )}
+
+          {/* Who it goes to: each chosen department's head */}
+          {chosen.length > 0 && (
             <div>
-              <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Assignee</label>
-              <Select value={assignedTo} onValueChange={setAssignedTo}>
-                <SelectTrigger className={tokens.select}>
-                  <SelectValue placeholder="Unassigned" />
-                </SelectTrigger>
-                <SelectContent className={tokens.selectContent}>
-                  {people.length === 0 ? (
-                    <SelectItem value="__none" disabled>Add team members first</SelectItem>
+              <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Goes to (department heads)</label>
+              <div className="flex flex-wrap gap-1.5">
+                {chosen.map(d =>
+                  d.headUserId ? (
+                    <span
+                      key={d.id}
+                      className="flex items-center gap-1.5 rounded-full border border-[#4233e0] bg-[#4233e0] px-2.5 py-1 text-xs text-white"
+                    >
+                      <Avatar user={{ name: d.headName }} size={16} /> {d.headName}
+                      <span className="opacity-80">· {d.name}{owner?.id === d.id && chosen.length > 1 ? " (owner)" : ""}</span>
+                      <Check className="w-3 h-3" />
+                    </span>
                   ) : (
-                    people.map(u => (
-                      <SelectItem key={u.id} value={u.id}>
-                        <span className="flex items-center gap-2">
-                          <Avatar user={u} size={18} /> {u.name || u.employeeId}
-                        </span>
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+                    <span key={d.id} className="rounded-full border border-amber-500/60 px-2.5 py-1 text-xs text-amber-600">
+                      {d.name} has no head yet
+                    </span>
+                  )
+                )}
+              </div>
+              <p className={`mt-1 text-[11px] ${tokens.textMuted}`}>
+                The task lands in each department's backlog. Their head assigns it to someone in the team.
+              </p>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -240,32 +264,6 @@ export function NewTaskModal({
               />
             </div>
           </div>
-
-          {/* People on the card besides the assignee */}
-          {people.length > 0 && (
-            <div>
-              <label className={`text-xs mb-1 block ${tokens.textMuted}`}>Members</label>
-              <div className="flex flex-wrap gap-1.5">
-                {people.map(u => {
-                  const on = memberIds.includes(u.id) || u.id === assignedTo;
-                  return (
-                    <button
-                      key={u.id}
-                      type="button"
-                      disabled={u.id === assignedTo}
-                      onClick={() => setMemberIds(m => toggle(m, u.id))}
-                      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
-                        on ? "bg-[#4233e0] border-[#4233e0] text-white" : `${tokens.border} ${tokens.textSecondary}`
-                      }`}
-                    >
-                      <Avatar user={u} size={16} /> {u.name || u.employeeId}
-                      {on && <Check className="w-3 h-3" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Labels */}
           {labels.length > 0 && (
@@ -341,19 +339,13 @@ export function NewTaskModal({
             </div>
           </div>
 
-          {people.length === 0 && (
-            <p className="text-xs text-amber-500">
-              Nobody is on this project yet. Add people from Manage team before assigning work.
-            </p>
-          )}
-
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={close} disabled={busy} className={tokens.btnGhost}>
               Cancel
             </Button>
             <Button
               onClick={() => void submit()}
-              disabled={!title.trim() || busy}
+              disabled={!title.trim() || departmentIds.length === 0 || busy}
               className="bg-[#4233e0] hover:bg-[#2a1fb0] text-white"
             >
               {busy
