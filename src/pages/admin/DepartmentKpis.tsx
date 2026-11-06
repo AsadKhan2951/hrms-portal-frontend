@@ -54,7 +54,9 @@ export function DepartmentKpis() {
         <button type="button" className="now-icon-btn" aria-label="Next month" disabled={atCurrent} onClick={() => shift(1)}>
           <ChevronRight className="h-4 w-4" />
         </button>
-        <span className="now-row-sub ml-2">Completed figures are for this month; open work is as of now.</span>
+        <span className="now-row-sub ml-2">
+          Completed figures are for this month; open work is as of now. A task shared by two departments counts for each.
+        </span>
       </div>
 
       {isLoading ? (
