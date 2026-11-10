@@ -20,6 +20,9 @@ export default function AnnouncementsManagement() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
+  // How long it stays up (empty: no end), and whether it pops up every day.
+  const [activeDays, setActiveDays] = useState("");
+  const [repeatDaily, setRepeatDaily] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: announcements = [], isLoading } = trpc.admin.getAnnouncements.useQuery();
@@ -30,6 +33,8 @@ export default function AnnouncementsManagement() {
       setTitle("");
       setContent("");
       setPriority("medium");
+      setActiveDays("");
+      setRepeatDaily(false);
       setShowCreateDialog(false);
     },
     onError: (error) => {
@@ -51,10 +56,17 @@ export default function AnnouncementsManagement() {
       toast.error("Please fill in all fields");
       return;
     }
+    const days = activeDays.trim() ? Number(activeDays) : undefined;
+    if (days !== undefined && (!Number.isInteger(days) || days < 1 || days > 365)) {
+      toast.error("Days must be a whole number from 1 to 365");
+      return;
+    }
     createAnnouncement.mutate({
       title,
       content,
       priority,
+      activeDays: days,
+      repeatDaily: days !== undefined && repeatDaily,
     });
   };
 
@@ -129,6 +141,32 @@ export default function AnnouncementsManagement() {
                 />
               </div>
 
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <span className="nb-label">Show for (days)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    inputMode="numeric"
+                    value={activeDays}
+                    onChange={e => setActiveDays(e.target.value)}
+                    placeholder="No end date"
+                    aria-label="Show for how many days"
+                    className="h-11 w-full rounded-xl border border-border bg-card px-3 text-sm"
+                  />
+                </div>
+                <label className="flex items-center gap-2 self-end pb-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={repeatDaily}
+                    disabled={!activeDays.trim()}
+                    onChange={e => setRepeatDaily(e.target.checked)}
+                  />
+                  Pop up every day until it ends
+                </label>
+              </div>
+
               <div className="flex flex-wrap gap-2">
                 <button type="button" className="now-btn sm ink" onClick={handleCreateAnnouncement}>
                   Publish Announcement
@@ -173,6 +211,13 @@ export default function AnnouncementsManagement() {
                       <Users className="h-3 w-3" aria-hidden="true" />
                       {announcement.readCount ?? 0} employees read
                     </span>
+                    {announcement.expiresAt && (
+                      <span>
+                        {new Date(announcement.expiresAt).getTime() > Date.now() ? "Ends" : "Ended"}{" "}
+                        {format(new Date(announcement.expiresAt), "MMM dd")}
+                        {announcement.repeatDaily ? " · pops up daily" : ""}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <button

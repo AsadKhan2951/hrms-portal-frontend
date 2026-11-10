@@ -31,6 +31,8 @@ export function AnnouncementPopup() {
     return (announcements as any[])
       .filter(a => a && !read.has(String(a.id)))
       .filter(a => {
+        // One with an end date shows until it ends; others for a few weeks.
+        if (a.expiresAt) return new Date(a.expiresAt).getTime() > Date.now();
         const t = new Date(a.createdAt).getTime();
         return Number.isNaN(t) || t >= cutoff;
       });

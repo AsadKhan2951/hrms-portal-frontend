@@ -20,6 +20,19 @@ import {
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, isAfter, isBefore, parseISO } from "date-fns";
 
+/**
+ * Company policy (10 Nov 2026): a first clock-in after 1:00 PM office time
+ * (Asia/Karachi) is late. Matches the server's LATE_AFTER_TIME default.
+ */
+function isLateArrival(timeIn: Date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Karachi", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(timeIn);
+  const hour = Number(parts.find(p => p.type === "hour")?.value ?? 0);
+  const minute = Number(parts.find(p => p.type === "minute")?.value ?? 0);
+  return hour * 60 + minute > 13 * 60;
+}
+
 export default function Attendance() {
   const [activeTab, setActiveTab] = useState("daily");
   const monthStart = startOfMonth(new Date());
@@ -42,13 +55,8 @@ export default function Attendance() {
       return sum + (parseFloat(entry.totalHours as any) || 0);
     }, 0);
 
-    // Count late arrivals (after 9:00 AM)
-    const lateArrivals = attendance.filter(entry => {
-      const timeIn = new Date(entry.timeIn);
-      const hour = timeIn.getHours();
-      const minute = timeIn.getMinutes();
-      return hour > 9 || (hour === 9 && minute > 0);
-    }).length;
+    // Count late arrivals (after 1:00 PM office time)
+    const lateArrivals = attendance.filter(entry => isLateArrival(new Date(entry.timeIn))).length;
 
     // Count early departures (status = early_out)
     const earlyDepartures = attendance.filter(e => e.status === "early_out").length;
@@ -87,9 +95,7 @@ export default function Attendance() {
   };
 
   const getPunctualityBadge = (timeIn: Date) => {
-    const hour = timeIn.getHours();
-    const minute = timeIn.getMinutes();
-    const isLate = hour > 9 || (hour === 9 && minute > 0);
+    const isLate = isLateArrival(timeIn);
 
     return isLate ? (
       <Badge variant="destructive" className="bg-red-500/10 text-red-500">
@@ -285,7 +291,7 @@ export default function Attendance() {
                   Punctuality / Late Arrival Report
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Track on-time arrivals and late check-ins (Standard: 9:00 AM)
+                  Track on-time arrivals and late check-ins (late after 1:00 PM)
                 </p>
               </div>
 
@@ -551,7 +557,7 @@ export default function Attendance() {
                                         Late Arrival
                                       </Badge>
                                       <span className="text-xs text-muted-foreground">
-                                        Clocked in at {format(timeIn, "HH:mm:ss")} (Standard: 09:00:00)
+                                        Clocked in at {format(timeIn, "HH:mm:ss")} (late after 13:00)
                                       </span>
                                     </div>
                                   )}
