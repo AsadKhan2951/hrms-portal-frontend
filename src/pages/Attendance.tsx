@@ -33,6 +33,19 @@ function isLateArrival(timeIn: Date) {
   return hour * 60 + minute > 13 * 60;
 }
 
+/** Minutes past 1:00 PM office time, for "+N min late". */
+function minutesLate(timeIn: Date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Karachi", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(timeIn);
+  const hour = Number(parts.find(p => p.type === "hour")?.value ?? 0);
+  const minute = Number(parts.find(p => p.type === "minute")?.value ?? 0);
+  return Math.max(0, hour * 60 + minute - 13 * 60);
+}
+
+/** A late arrival the head approved still shows, but is not a late mark. */
+const countsAsLate = (entry: any) => isLateArrival(new Date(entry.timeIn)) && !entry.lateExcused;
+
 export default function Attendance() {
   const [activeTab, setActiveTab] = useState("daily");
   const monthStart = startOfMonth(new Date());
@@ -56,7 +69,7 @@ export default function Attendance() {
     }, 0);
 
     // Count late arrivals (after 1:00 PM office time)
-    const lateArrivals = attendance.filter(entry => isLateArrival(new Date(entry.timeIn))).length;
+    const lateArrivals = attendance.filter(countsAsLate).length;
 
     // Count early departures (status = early_out)
     const earlyDepartures = attendance.filter(e => e.status === "early_out").length;
@@ -94,10 +107,16 @@ export default function Attendance() {
     return "text-red-500";
   };
 
-  const getPunctualityBadge = (timeIn: Date) => {
-    const isLate = isLateArrival(timeIn);
-
-    return isLate ? (
+  const getPunctualityBadge = (entry: any) => {
+    if (isLateArrival(new Date(entry.timeIn)) && entry.lateExcused) {
+      return (
+        <Badge variant="default" className="bg-amber-500/10 text-amber-600">
+          <CheckCircle2 className="h-3 w-3 mr-1" />
+          Late (excused)
+        </Badge>
+      );
+    }
+    return countsAsLate(entry) ? (
       <Badge variant="destructive" className="bg-red-500/10 text-red-500">
         <AlertCircle className="h-3 w-3 mr-1" />
         Late
@@ -300,10 +319,8 @@ export default function Attendance() {
                   <div className="space-y-2">
                     {attendance.map((entry) => {
                       const timeIn = new Date(entry.timeIn);
-                      const hour = timeIn.getHours();
-                      const minute = timeIn.getMinutes();
-                      const isLate = hour > 9 || (hour === 9 && minute > 0);
-                      const minutesLate = isLate ? (hour - 9) * 60 + minute : 0;
+                      const isLate = countsAsLate(entry);
+                      const lateBy = isLate ? minutesLate(timeIn) : 0;
                       
                       return (
                         <Card key={entry.id} className={`p-4 ${isLate ? 'border-red-500/20' : 'border-green-500/20'}`}>
@@ -330,11 +347,11 @@ export default function Attendance() {
                               {isLate && (
                                 <div className="text-right">
                                   <p className="text-sm font-semibold text-red-500">
-                                    +{minutesLate} min late
+                                    +{lateBy} min late
                                   </p>
                                 </div>
                               )}
-                              {getPunctualityBadge(timeIn)}
+                              {getPunctualityBadge(entry)}
                             </div>
                           </div>
                         </Card>
@@ -524,19 +541,10 @@ export default function Attendance() {
                 {attendance && attendance.length > 0 ? (
                   <div className="space-y-2">
                     {attendance
-                      .filter(entry => {
-                        const timeIn = new Date(entry.timeIn);
-                        const hour = timeIn.getHours();
-                        const minute = timeIn.getMinutes();
-                        const isLate = hour > 9 || (hour === 9 && minute > 0);
-                        const isEarlyOut = entry.status === "early_out";
-                        return isLate || isEarlyOut;
-                      })
+                      .filter(entry => countsAsLate(entry) || entry.status === "early_out")
                       .map((entry) => {
                         const timeIn = new Date(entry.timeIn);
-                        const hour = timeIn.getHours();
-                        const minute = timeIn.getMinutes();
-                        const isLate = hour > 9 || (hour === 9 && minute > 0);
+                        const isLate = countsAsLate(entry);
                         const isEarlyOut = entry.status === "early_out";
                         const hours = parseFloat(entry.totalHours as any) || 0;
                         
@@ -577,14 +585,7 @@ export default function Attendance() {
                           </Card>
                         );
                       })}
-                    {attendance.filter(entry => {
-                      const timeIn = new Date(entry.timeIn);
-                      const hour = timeIn.getHours();
-                      const minute = timeIn.getMinutes();
-                      const isLate = hour > 9 || (hour === 9 && minute > 0);
-                      const isEarlyOut = entry.status === "early_out";
-                      return isLate || isEarlyOut;
-                    }).length === 0 && (
+                    {attendance.filter(entry => countsAsLate(entry) || entry.status === "early_out").length === 0 && (
                       <div className="text-center py-8 text-muted-foreground">
                         <CheckCircle2 className="h-10 w-10 mx-auto mb-3 opacity-50 text-green-500" />
                         <p className="text-sm">No attendance exceptions found</p>

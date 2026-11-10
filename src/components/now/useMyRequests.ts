@@ -11,7 +11,7 @@ export type MyRequest = {
   key: string;
   title: string;
   detail: string;
-  type: "Leave" | "Overtime" | "Attendance" | "Ticket" | "Grievance" | "Feedback" | "Resignation";
+  type: "Leave" | "Overtime" | "Attendance" | "Late arrival" | "Ticket" | "Grievance" | "Feedback" | "Resignation";
   when: Date;
   status: string;
   /** Still waiting on somebody. */
@@ -56,8 +56,11 @@ export function useMyRequests() {
       list.push({
         key: `request-${request.id}`,
         title: request.subject,
-        detail: request.reviewNote || request.details || (request.kind === "support_ticket" ? "Support ticket" : "Attendance correction"),
-        type: request.kind === "support_ticket" ? "Ticket" : "Attendance",
+        detail:
+          request.reviewNote ||
+          request.details ||
+          (request.kind === "support_ticket" ? "Support ticket" : request.kind === "late_arrival" ? "Late arrival" : "Attendance correction"),
+        type: request.kind === "support_ticket" ? "Ticket" : request.kind === "late_arrival" ? "Late arrival" : "Attendance",
         when: new Date(request.createdAt),
         status: cap(String(request.status)),
         open: request.status === "pending",

@@ -66,6 +66,8 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
     onSuccess: () => {
       toast.success("Clocked in successfully!");
       utils.timeTracking.getActive.invalidate();
+      // A late clock-in shows up on Home with a way to explain it.
+      utils.requests.myLateArrivals.invalidate();
       onOpenChange(false);
     },
     onError: (error) => {
@@ -109,9 +111,11 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
     }
   }, [activeEntry, currentTime]);
 
+  // Company rule: no clock-in without the person's location. The server
+  // refuses one without it too, so this is the friendly half of the rule.
   const handleClockIn = () => {
     if (!navigator.geolocation) {
-      clockInMutation.mutate();
+      toast.error("This browser cannot share your location, so you cannot clock in here. Use a phone or another browser.");
       return;
     }
 
@@ -130,8 +134,14 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
       },
       (error) => {
         setLocating(false);
-        toast.error(error.message || "Unable to fetch location. Clocking in without location.");
-        clockInMutation.mutate();
+        toast.error(
+          error.code === error.PERMISSION_DENIED
+            ? "Location is blocked. Allow location for this site (the icon left of the address bar, or your phone's settings), then clock in again."
+            : error.code === error.TIMEOUT
+              ? "Finding your location took too long. Check that location is on, then try again."
+              : "Your location is off. Turn on location (GPS) on your device, then clock in again.",
+          { duration: 8000 }
+        );
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
     );
@@ -229,7 +239,7 @@ export function TimeInOutDialog({ open, onOpenChange }: TimeInOutDialogProps) {
             <DialogDescription>
               {activeEntry
                 ? "Review your work summary and clock out"
-                : "Start your work day by clocking in"}
+                : "Start your work day by clocking in. Your location must be on to clock in."}
             </DialogDescription>
           </DialogHeader>
 

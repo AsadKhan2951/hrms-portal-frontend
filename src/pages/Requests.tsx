@@ -5,6 +5,7 @@ import NowPage, { Segmented, WingmanBanner } from "@/components/now/NowPage";
 import {
   CorrectionDialog,
   FormDialog,
+  LateDialog,
   LeaveDialog,
   OvertimeDialog,
   TicketDialog,
@@ -12,12 +13,13 @@ import {
 } from "@/components/now/RequestDialogs";
 import { requestStatusColor, useMyRequests } from "@/components/now/useMyRequests";
 
-type Kind = "leave" | "overtime" | "correction" | "ticket" | FormKind;
+type Kind = "leave" | "overtime" | "correction" | "late" | "ticket" | FormKind;
 
 const TYPES: { kind: Kind; name: string; desc: string }[] = [
   { kind: "leave", name: "Leave", desc: "Annual, casual or sick, full or half day" },
   { kind: "overtime", name: "Overtime", desc: "Log extra hours for today or yesterday" },
   { kind: "correction", name: "Attendance correction", desc: "Fix a missing clock in or out" },
+  { kind: "late", name: "Late arrival", desc: "Explain a late clock-in, within 48 hours" },
   { kind: "ticket", name: "Support ticket", desc: "IT, equipment or portal problems" },
   { kind: "grievance", name: "Grievance", desc: "Report a workplace issue in confidence" },
   { kind: "feedback", name: "Feedback", desc: "Share an idea or suggestion" },
@@ -115,6 +117,7 @@ export default function Requests() {
       <LeaveDialog open={open === "leave"} onOpenChange={close} />
       <OvertimeDialog open={open === "overtime"} onOpenChange={close} />
       <CorrectionDialog open={open === "correction"} onOpenChange={close} />
+      <LateDialog open={open === "late"} onOpenChange={close} />
       <TicketDialog open={open === "ticket"} onOpenChange={close} />
       {(["grievance", "feedback", "resignation"] as FormKind[]).map(kind => (
         <FormDialog key={kind} kind={kind} open={open === kind} onOpenChange={close} />

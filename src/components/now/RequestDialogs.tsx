@@ -462,6 +462,117 @@ export function CorrectionDialog({
   );
 }
 
+// ------------------------------------------------------------ late arrival
+
+/** "Tue 10 Nov" for an office-local "YYYY-MM-DD". */
+const lateDay = (date: string) => format(new Date(`${date}T00:00:00`), "EEE d MMM");
+
+/**
+ * Explain a late clock-in to the department head. Open for 48 hours after the
+ * clock-in; the head approves (the day stops counting as late) or rejects.
+ */
+export function LateDialog({ open, onOpenChange }: DialogProps) {
+  const utils = trpc.useUtils();
+  const { data = [], isLoading } = trpc.requests.myLateArrivals.useQuery(undefined, { enabled: open });
+  const late = data as any[];
+  const waiting = late.filter(item => !item.request);
+  const [entryId, setEntryId] = useState("");
+  const [reason, setReason] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setReason("");
+  }, [open]);
+  useEffect(() => {
+    if (!waiting.some(item => item.timeEntryId === entryId)) setEntryId(waiting[0]?.timeEntryId ?? "");
+  }, [data]);
+
+  const submit = trpc.requests.explainLate.useMutation({
+    onSuccess: () => {
+      toast.success("Sent to your department head");
+      onOpenChange(false);
+      utils.requests.getMine.invalidate();
+      utils.requests.myLateArrivals.invalidate();
+      utils.wingman.getOverview.invalidate();
+    },
+    onError: (error: any) => toast.error(error.message || "Could not send your explanation"),
+  });
+
+  const chosen = waiting.find(item => item.timeEntryId === entryId);
+
+  return (
+    <Shell
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Explain a late arrival"
+      description="Tell your department head why you were late. If they approve, the day stops counting as a late mark. You have 48 hours from the clock-in."
+      submitLabel="Send to my head"
+      pending={submit.isPending}
+      disabled={!chosen}
+      onSubmit={() => {
+        if (!chosen) return;
+        if (reason.trim().length < 5) return toast.error("Say a little more about why you were late");
+        submit.mutate({ timeEntryId: chosen.timeEntryId, reason: reason.trim() });
+      }}
+    >
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Checking your clock-ins
+        </div>
+      ) : waiting.length === 0 ? (
+        <div className="space-y-2 text-sm">
+          <p className="text-muted-foreground">
+            You have no late arrival to explain. Only a late clock-in from the last 48 hours can be explained.
+          </p>
+          {late.map(item => (
+            <p key={item.timeEntryId}>
+              {lateDay(item.date)}, in at {item.clock}: <strong>{item.request.status === "pending" ? "waiting for your head" : item.request.status}</strong>
+            </p>
+          ))}
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2">
+            <Label>Late day</Label>
+            {waiting.length === 1 ? (
+              <p className="text-sm">
+                <strong>{lateDay(chosen?.date ?? waiting[0].date)}</strong>, clocked in at {chosen?.clock ?? waiting[0].clock}
+              </p>
+            ) : (
+              <Select value={entryId} onValueChange={setEntryId}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {waiting.map(item => (
+                    <SelectItem key={item.timeEntryId} value={item.timeEntryId}>
+                      {lateDay(item.date)}, in at {item.clock}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {chosen && (
+              <p className="text-xs text-muted-foreground">
+                Send it before {format(new Date(chosen.deadline), "EEE d MMM, h:mm a")}.
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="late-reason">Why were you late?</Label>
+            <Textarea
+              id="late-reason"
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              maxLength={1000}
+              className="min-h-[100px]"
+              placeholder="For example: stuck in traffic after an accident on the main road."
+            />
+          </div>
+        </>
+      )}
+    </Shell>
+  );
+}
+
 // ---------------------------------------------------------- support ticket
 
 export function TicketDialog({ open, onOpenChange }: DialogProps) {

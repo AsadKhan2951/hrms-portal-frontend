@@ -13,7 +13,7 @@ import { trpc } from "@/lib/trpc";
 type Decision = "approved" | "rejected" | "resolved";
 type Row = {
   id: string;
-  kind: "attendance_correction" | "support_ticket";
+  kind: "attendance_correction" | "support_ticket" | "late_arrival";
   subject: string;
   details: string;
   workDate: Date | null;
@@ -30,8 +30,10 @@ type Row = {
 const cap = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
 /**
- * Attendance corrections and support tickets sent to the person signed in.
- * Approving a correction writes the corrected times onto that day's record.
+ * Attendance corrections, late-arrival explanations and support tickets sent
+ * to the person signed in. Approving a correction writes the corrected times
+ * onto that day's record; approving a late arrival stops that day counting as
+ * a late mark.
  */
 export default function RequestsReview() {
   const utils = trpc.useUtils();
@@ -44,7 +46,9 @@ export default function RequestsReview() {
   const review = trpc.requests.review.useMutation({
     onSuccess: (result: any) => {
       toast.success(
-        deciding?.status === "approved"
+        deciding?.status === "approved" && deciding.row.kind === "late_arrival"
+          ? "Approved. That day no longer counts as a late mark."
+          : deciding?.status === "approved"
           ? result.appliedToAttendance
             ? "Approved. The attendance record has been corrected."
             : "Approved. Nothing could be written to attendance: the request did not give both times for a day with no record."
@@ -70,7 +74,7 @@ export default function RequestsReview() {
         <div>
           <h1>Requests</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Attendance corrections and support tickets sent to you. {pending > 0 ? `${pending} waiting.` : "Nothing waiting."}
+            Attendance corrections, late arrivals and support tickets sent to you. {pending > 0 ? `${pending} waiting.` : "Nothing waiting."}
           </p>
         </div>
 
@@ -119,6 +123,7 @@ export default function RequestsReview() {
                     )}
                     {row.details && (
                       <div className="now-body-2" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
+                        {row.kind === "late_arrival" && <strong>Reason: </strong>}
                         {row.details}
                       </div>
                     )}
@@ -129,7 +134,11 @@ export default function RequestsReview() {
                     )}
                   </div>
                   <div className="now-muted" style={{ flex: "0 1 140px", fontSize: 14 }}>
-                    {row.kind === "support_ticket" ? `Ticket${row.category ? ` · ${cap(row.category)}` : ""}` : "Attendance"}
+                    {row.kind === "support_ticket"
+                      ? `Ticket${row.category ? ` · ${cap(row.category)}` : ""}`
+                      : row.kind === "late_arrival"
+                        ? "Late arrival"
+                        : "Attendance"}
                   </div>
                   <div style={{ flex: "0 0 auto", display: "flex", gap: 8, alignItems: "center" }}>
                     {row.status !== "pending" ? (
@@ -160,11 +169,17 @@ export default function RequestsReview() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {deciding?.status === "approved" ? "Approve correction" : deciding?.status === "resolved" ? "Resolve ticket" : "Reject request"}
+              {deciding?.status === "approved"
+                ? deciding.row.kind === "late_arrival" ? "Approve late arrival" : "Approve correction"
+                : deciding?.status === "resolved" ? "Resolve ticket" : "Reject request"}
             </DialogTitle>
             <DialogDescription>
-              {deciding?.status === "approved"
+              {deciding?.status === "approved" && deciding.row.kind === "late_arrival"
+                ? "The day keeps its real clock-in time but no longer counts as a late mark."
+                : deciding?.status === "approved"
                 ? "The times in this request will replace the ones on that day's attendance record."
+                : deciding?.row.kind === "late_arrival"
+                ? `${deciding.row.subject}. It stays a late mark.`
                 : deciding?.row.subject}
             </DialogDescription>
           </DialogHeader>

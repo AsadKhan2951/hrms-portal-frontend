@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
 import { TimeInOutDialog } from "@/components/TimeInOutDialog";
+import { LateDialog } from "@/components/now/RequestDialogs";
 import {
   Calendar, 
   MessageSquare, 
@@ -89,6 +90,9 @@ function TodayCalendarWidgetContent() {
 export default function Dashboard() {
   const { user } = useAuth();
   const [timeDialogOpen, setTimeDialogOpen] = useState(false);
+  const [lateDialogOpen, setLateDialogOpen] = useState(false);
+  // Late clock-ins from the last 48 hours, so the person can explain them.
+  const { data: lateArrivals = [] } = trpc.requests.myLateArrivals.useQuery();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [breakOverlayOpen, setBreakOverlayOpen] = useState(false);
   const [breakDialogOpen, setBreakDialogOpen] = useState(false);
@@ -346,6 +350,15 @@ export default function Dashboard() {
   // On unless the person turned it off under Wingman settings.
   const showBrief = wingmanSettings?.morningBrief !== false;
   const briefItems: { key: string; title: string; detail: string; action: string; href?: string; onClick?: () => void }[] = [];
+  for (const late of (lateArrivals as any[]).filter(item => !item.request).slice(0, 1)) {
+    briefItems.push({
+      key: `late-${late.timeEntryId}`,
+      title: `You clocked in late at ${late.clock}`,
+      detail: `Explain it to your department head before ${format(new Date(late.deadline), "EEE d MMM, h:mm a")}.`,
+      action: "Explain",
+      onClick: () => setLateDialogOpen(true),
+    });
+  }
   if (!activeEntry) {
     briefItems.push({
       key: "clock",
@@ -628,6 +641,7 @@ export default function Dashboard() {
 
       {/* Time In/Out Dialog */}
       <TimeInOutDialog open={timeDialogOpen} onOpenChange={setTimeDialogOpen} />
+      <LateDialog open={lateDialogOpen} onOpenChange={setLateDialogOpen} />
 
       {/* Break Reason Dialog */}
       <Dialog open={breakDialogOpen} onOpenChange={setBreakDialogOpen}>

@@ -54,9 +54,10 @@ export default function Login() {
 
   /**
    * "Clock me in as I sign in". Runs after the session cookie is set and
-   * before the redirect. Best effort: it sends the same optional GPS fix the
-   * clock-in dialog sends, and a failure (already clocked in, say) never
-   * blocks the sign-in itself - the person can still clock in from Home.
+   * before the redirect. Best effort: it needs the same GPS fix the clock-in
+   * dialog does (no clock-in without location), and a failure (location off,
+   * already clocked in) never blocks the sign-in itself - the person can
+   * still clock in from Home.
    */
   const clockInIfAsked = async () => {
     if (!clockMeIn) return;
@@ -78,7 +79,11 @@ export default function Login() {
           { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
         );
       });
-      await clockInMutation.mutateAsync(location ? { location } : undefined);
+      if (!location) {
+        toast.error("You were signed in but not clocked in: turn on location, then clock in from Home.", { duration: 8000 });
+        return;
+      }
+      await clockInMutation.mutateAsync({ location });
     } catch {
       // Already clocked in, or the clock refused; Home shows the real state.
     } finally {
