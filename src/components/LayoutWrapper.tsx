@@ -144,6 +144,9 @@ function EmployeeLayout({ children, chatWidget = false }: LayoutWrapperProps) {
     { icon: Megaphone, label: "News", path: "/announcements" },
   ];
 
+  // The project manager oversees every department's board, as the owner does.
+  const { data: isProjectManager = false } = trpc.fpb.canCreateProjects.useQuery();
+
   // A department head runs their team from the same sidebar.
   if (isAnyHead(user?.role)) {
     menuItems.push(
@@ -152,6 +155,8 @@ function EmployeeLayout({ children, chatWidget = false }: LayoutWrapperProps) {
       { icon: FileCheck, label: "Leave Approvals", path: "/admin/leaves" },
       { icon: ClipboardCheck, label: "Team Requests", path: "/admin/requests" },
     );
+  } else if (isProjectManager) {
+    menuItems.push({ icon: Columns3, label: "Department Boards", path: "/department-board" });
   }
 
   const navItems: NowNavItem[] = menuItems.map(item =>

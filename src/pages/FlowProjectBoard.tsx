@@ -76,9 +76,16 @@ export default function FlowProjectBoard() {
   // Which sub-project's board is showing; null lets the server pick the first.
   const [subId, setSubId] = useState<string | null>(null);
 
-  // Heads (and admins) can switch to one of their employees and see that
-  // person's projects and boards instead of their own.
-  const canPickEmployee = isAnyHead((user as any)?.role);
+  // Opening a project is a granted right now, so the button is hidden rather
+  // than offered and then refused. The server checks this again.
+  const { data: mayCreate = false } = trpc.fpb.canCreateProjects.useQuery();
+  // Admins and the project manager oversee all the work: every project, and
+  // anyone's boards.
+  const seesAll = isAdmin || Boolean(mayCreate);
+
+  // Heads, admins and the project manager can switch to an employee and see
+  // that person's projects and boards instead of their own.
+  const canPickEmployee = isAnyHead((user as any)?.role) || seesAll;
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const { data: teamPeople = [] } = trpc.fpb.getTeamMembers.useQuery(undefined, {
     enabled: canPickEmployee,
@@ -98,9 +105,6 @@ export default function FlowProjectBoard() {
     );
   const { data: users = [] } = trpc.fpb.getUsers.useQuery();
   const { data: departments = [] } = trpc.fpb.getDepartments.useQuery();
-  // Opening a project is a granted right now, so the button is hidden rather
-  // than offered and then refused. The server checks this again.
-  const { data: mayCreate = false } = trpc.fpb.canCreateProjects.useQuery();
 
   // Fall back to the first project when nothing is chosen, or when the chosen
   // one has been deleted or filtered out.
@@ -319,12 +323,12 @@ export default function FlowProjectBoard() {
         {/* ───────────────────────── Project, sub-project, view, new task */}
         <div className="now-board-bar">
           <div className="now-board-bar-left">
-            {canPickEmployee && (isAdmin || (teamPeople as any[]).length > 0) && (
+            {canPickEmployee && (seesAll || (teamPeople as any[]).length > 0) && (
               <EmployeePicker
                 people={teamPeople as any[]}
                 value={employeeId}
                 onChange={chooseEmployee}
-                meLabel={isAdmin ? "All projects" : "My projects"}
+                meLabel={seesAll ? "All projects" : "My projects"}
               />
             )}
             {!usePicker && (projects as any[]).length > 1 && (
