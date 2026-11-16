@@ -1,6 +1,7 @@
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { LogOut, Menu, Moon, Search, Sun, X } from "lucide-react";
+import { ORG_NAME } from "@/lib/org";
 import { useTheme } from "@/contexts/ThemeContext";
 import AvatarFace from "@/components/now/AvatarFace";
 
@@ -149,6 +150,7 @@ export default function NowShell({
     <div className="now-shell">
       <aside className="now-rail">
         <img className="now-rail-logo" src="/new-logo-v2.png" alt="Now" />
+        {ORG_NAME && <span className="now-rail-org">{ORG_NAME}</span>}
         {badge && <span className="now-rail-badge">{badge}</span>}
         {!compact && search}
         {navList()}
@@ -163,6 +165,7 @@ export default function NowShell({
       {sheetOpen && (
         <div className="now-sheet">
           <img className="now-rail-logo" src="/new-logo-v2.png" alt="Now" />
+          {ORG_NAME && <span className="now-rail-org">{ORG_NAME}</span>}
           {badge && <span className="now-rail-badge">{badge}</span>}
           {!compact && search}
           {navList(() => setSheetOpen(false))}

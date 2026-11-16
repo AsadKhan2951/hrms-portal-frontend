@@ -6,7 +6,11 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import { getLoginUrl } from "./const";
+import { PAGE_TITLE } from "./lib/org";
 import "./index.css";
+
+// One codebase serves several companies; each build names its own.
+document.title = PAGE_TITLE;
 
 const queryClient = new QueryClient();
 

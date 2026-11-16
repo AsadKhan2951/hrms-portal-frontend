@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { isAnyHead, isOrgWide } from "@/lib/roles";
 import { toast } from "sonner";
 import { Loader2, Sparkles } from "lucide-react";
+import { ORG_NAME } from "@/lib/org";
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -171,6 +172,7 @@ export default function Login() {
       <section className="now-signin-hero">
         <img src="/new-logo-v2.png" alt="Now" />
         <div>
+          {ORG_NAME && <div className="now-signin-org">{ORG_NAME}</div>}
           <div className="now-signin-date">{longDate}</div>
           <div className="now-signin-clock" aria-hidden="true">
             {hhmm}

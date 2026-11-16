@@ -253,6 +253,14 @@
   display: flex; flex-direction: column; gap: 24px;
 }
 .now-rail-logo { height: 28px; width: auto; align-self: flex-start; margin-left: 14px; object-fit: contain; }
+.now-rail-org {
+  margin: -6px 0 0 14px; align-self: flex-start; color: var(--now-rail-text); opacity: .75;
+  font-size: 13px; font-weight: 600; letter-spacing: .02em;
+}
+.now-signin-org {
+  display: inline-block; margin-bottom: 14px; padding: 4px 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, .12); font-size: 14px; font-weight: 700; letter-spacing: .02em;
+}
 .now-rail-badge {
   margin-left: 14px; align-self: flex-start; padding: 3px 10px; border-radius: 999px;
   background: var(--now-indigo); color: #fff; font-size: 12px; font-weight: 700;
