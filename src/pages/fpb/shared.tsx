@@ -23,12 +23,14 @@ export const PROJECT_TYPES: {
 ];
 
 /** What a project covers. A project can have several. Replaces the old project types. */
-export type ProjectScope = "social_media" | "design" | "saas" | "website";
+export type ProjectScope = "social_media" | "design" | "saas" | "website" | "seo" | "marketing";
 export const PROJECT_SCOPES: { value: ProjectScope; label: string }[] = [
   { value: "social_media", label: "Social Media" },
   { value: "design", label: "Design" },
   { value: "saas", label: "SaaS" },
   { value: "website", label: "Website" },
+  { value: "seo", label: "SEO" },
+  { value: "marketing", label: "Marketing" },
 ];
 
 /** "Website, Design", or "No scope" for projects made before scopes existed. */
