@@ -95,7 +95,8 @@ export default function Wingman() {
               <div className="now-bubble-wm">
                 <div className="now-lede">Tell me what you need.</div>
                 <div className="now-body-2">
-                  I can clock you in and out, start a break, draft leave, raise a ticket, and tell you what is due. I work
+                  I can clock you out, start a break, draft leave, raise a ticket, and tell you what is due. Clocking in
+                  happens on Home, where your location is checked. I work
                   from the portal's own records, and I never send a request to HR without your OK.
                 </div>
               </div>

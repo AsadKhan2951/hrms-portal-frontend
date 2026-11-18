@@ -359,6 +359,17 @@ export default function Dashboard() {
       onClick: () => setLateDialogOpen(true),
     });
   }
+  // Still clocked in from an earlier day: the clock-out was missed. Until it
+  // is closed they cannot clock in again, and the day's hours do not count.
+  if (activeEntry && new Date((activeEntry as any).timeIn).getTime() < todayStartMs) {
+    briefItems.push({
+      key: "stale-clock",
+      title: `You are still clocked in from ${format(new Date((activeEntry as any).timeIn), "EEE d MMM")}`,
+      detail: "Clock out, then send an attendance correction with your real hours for that day.",
+      action: "Clock out",
+      onClick: () => setTimeDialogOpen(true),
+    });
+  }
   if (!activeEntry) {
     briefItems.push({
       key: "clock",
@@ -556,7 +567,9 @@ export default function Dashboard() {
                       ? "You are clocked out."
                       : activeBreak
                         ? `On break since ${format(new Date(activeBreak.breakStart), "HH:mm")}`
-                        : `Since ${format(new Date(activeEntry.timeIn), "HH:mm")} today`}
+                        : new Date(activeEntry.timeIn).getTime() >= todayStartMs
+                          ? `Since ${format(new Date(activeEntry.timeIn), "HH:mm")} today`
+                          : `Since ${format(new Date(activeEntry.timeIn), "EEE d MMM, HH:mm")}`}
                   </div>
                 </div>
                 <div className="flex gap-2.5">
