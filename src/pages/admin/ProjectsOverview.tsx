@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
-import { useLocation } from "wouter";
+import { Redirect, useLocation } from "wouter";
 import { AlertTriangle, ChevronDown, Loader2, Search } from "lucide-react";
 
-import AdminLayout from "@/components/AdminLayout";
+import { useAuth } from "@/_core/hooks/useAuth";
+import LayoutWrapper from "@/components/LayoutWrapper";
+import { isOrgWide } from "@/lib/roles";
 import { NowPageHeader, Segmented } from "@/components/now/NowPage";
 import { trpc } from "@/lib/trpc";
 import { Avatar, formatDate, scopeLabel } from "@/pages/fpb/shared";
@@ -23,6 +25,12 @@ export default function ProjectsOverview() {
   const [search, setSearch] = useState("");
   const [onlyOverdue, setOnlyOverdue] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  // Admins and the project manager (project rights) see every project; the
+  // server checks the same.
+  const { user } = useAuth();
+  const { data: isProjectManager, isLoading: rightsLoading } = trpc.fpb.canCreateProjects.useQuery();
+  const allowed = isOrgWide((user as any)?.role) || Boolean(isProjectManager);
 
   const { data, isLoading, isError } = trpc.fpb.getOverview.useQuery(
     status === "active" ? { status: "active" } : undefined
@@ -59,8 +67,10 @@ export default function ProjectsOverview() {
       return next;
     });
 
+  if (user && !rightsLoading && !allowed) return <Redirect to="/dashboard" />;
+
   return (
-    <AdminLayout title="All Projects">
+    <LayoutWrapper>
       <div className="now-page">
         <NowPageHeader
           title="All projects"
@@ -234,6 +244,6 @@ export default function ProjectsOverview() {
         </p>
         </>)}
       </div>
-    </AdminLayout>
+    </LayoutWrapper>
   );
 }

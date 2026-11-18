@@ -155,8 +155,14 @@ function EmployeeLayout({ children, chatWidget = false }: LayoutWrapperProps) {
       { icon: FileCheck, label: "Leave Approvals", path: "/admin/leaves" },
       { icon: ClipboardCheck, label: "Team Requests", path: "/admin/requests" },
     );
-  } else if (isProjectManager) {
-    menuItems.push({ icon: Columns3, label: "Department Boards", path: "/department-board" });
+  }
+  // The project manager has the admin's board rights: every department's
+  // board, and every project with the departments' KPIs.
+  if (isProjectManager) {
+    if (!isAnyHead(user?.role)) {
+      menuItems.push({ icon: Columns3, label: "Department Boards", path: "/department-board" });
+    }
+    menuItems.push({ icon: LayoutGrid, label: "All Projects", path: "/admin/work" });
   }
 
   const navItems: NowNavItem[] = menuItems.map(item =>

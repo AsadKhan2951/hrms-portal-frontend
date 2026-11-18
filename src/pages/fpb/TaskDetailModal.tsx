@@ -61,7 +61,10 @@ export function TaskDetailModal({
   const open = taskId !== null;
   const { user } = useAuth();
   const myId = (user as any)?.id ? String((user as any).id) : null;
-  const orgWide = isOrgWide((user as any)?.role);
+  const { data: mayCreateProjects = false } = trpc.fpb.canCreateProjects.useQuery(undefined, { enabled: open });
+  // Admins and the project manager have every right on the board (the server
+  // checks the same): assign anyone, see deleted comments, moderate them.
+  const orgWide = isOrgWide((user as any)?.role) || Boolean(mayCreateProjects);
   const canManageLabels = canManageProp ?? (orgWide || (projectOwnerId ?? "") === myId);
 
   const { data, isLoading } = trpc.fpb.getTask.useQuery(
@@ -77,7 +80,6 @@ export function TaskDetailModal({
   const cardMemberIds = ((data as any)?.memberIds ?? []) as string[];
   // A department task: handed to departments, whose heads assign it.
   const departmentTask = ((task?.departmentIds ?? []) as unknown[]).length > 0;
-  const { data: mayCreateProjects = false } = trpc.fpb.canCreateProjects.useQuery(undefined, { enabled: open });
   const canEditDepartments = orgWide || (projectOwnerId ?? "") === myId || Boolean(mayCreateProjects);
 
   const [title, setTitle] = useState("");

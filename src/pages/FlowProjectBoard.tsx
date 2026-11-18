@@ -211,7 +211,7 @@ export default function FlowProjectBoard() {
   // Deleting columns, sub-projects or the project: its owner, a department
   // head or an admin. The server checks this too.
   const canManage =
-    isAdmin || isAnyHead((user as any)?.role) || String(project?.createdBy ?? "") === myId;
+    seesAll || isAnyHead((user as any)?.role) || String(project?.createdBy ?? "") === myId;
 
   const deleteTask = trpc.fpb.deleteTask.useMutation({
     onSuccess: () => { refreshBoard(); utils.fpb.getProjects.invalidate(); toast.success("Task deleted"); },
@@ -544,7 +544,7 @@ export default function FlowProjectBoard() {
             projectTitle={project.title}
             users={users as any[]}
             wideScopeLabel={
-              isAdmin ? "Whole company" : isAnyHead((user as any)?.role) ? "My departments" : "All my projects"
+              seesAll ? "Whole company" : isAnyHead((user as any)?.role) ? "My departments" : "All my projects"
             }
           />
         )}
